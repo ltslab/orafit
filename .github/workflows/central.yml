@@ -1,0 +1,107 @@
+name: Maven Central
+
+# Publishing to Maven Central is irreversible, so it is never triggered by a tag.
+# The default dispatches a USER_MANAGED deployment: Central validates it and then
+# waits on central.sonatype.com until a human publishes it. Set publish=true only
+# when you want Central to publish automatically after validation.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version to publish (must match tag v<version> and pom.xml)
+        required: true
+      publish:
+        description: Publish automatically once Central validates (irreversible)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: central-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  central:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: central
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/tags/v${{ inputs.version }}
+          fetch-depth: 0
+
+      - name: Verify tag, version, release assets, and CI evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version="$(awk -F'[<>]' '/<version>/{print $3; exit}' pom.xml)"
+          test -n "$version"
+          test "$version" = "$VERSION"
+          case "$version" in *-SNAPSHOT) echo "refusing to publish $version"; exit 1 ;; esac
+
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor HEAD origin/main
+
+          # The GitHub Release is the record of the artifact set; Central must not
+          # get ahead of it.
+          assets="$(gh release view "v$version" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name')"
+          grep -qx "orafit-jdbc-$version.jar" <<<"$assets" || {
+            echo "GitHub Release v$version has no orafit-jdbc-$version.jar"; exit 1; }
+          gh release download "v$version" --repo "$GITHUB_REPOSITORY" \
+            --pattern SHA256SUMS --output "$RUNNER_TEMP/SHA256SUMS"
+          release_sha256() {
+            local hash
+            hash="$(awk -v f="$1" '$2 == f {print $1}' "$RUNNER_TEMP/SHA256SUMS")"
+            [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || { echo "SHA256SUMS has no hash for $1" >&2; return 1; }
+            printf '%s' "$hash"
+          }
+          jar_sha256="$(release_sha256 "orafit-jdbc-$version.jar")"
+          runtime_sha256="$(release_sha256 "orafit-jdbc-$version-runtime.tar.gz")"
+          {
+            echo "RELEASE_JAR_SHA256=$jar_sha256"
+            echo "RELEASE_RUNTIME_SHA256=$runtime_sha256"
+          } >> "$GITHUB_ENV"
+
+          # Compatibility evidence for this exact commit (see AGENTS.md).
+          run_id="$(gh run list --workflow ci.yml --branch main --event push \
+            --commit "$GITHUB_SHA" --json databaseId,conclusion \
+            --jq '[.[] | select(.conclusion == "success")][0].databaseId // empty')"
+          test -n "$run_id" || { echo "no successful ci.yml run for $GITHUB_SHA"; exit 1; }
+
+      - uses: actions/setup-java@v5.7.0
+        with:
+          distribution: temurin
+          java-version: '17'
+          server-id: central
+          server-username: CENTRAL_USERNAME
+          server-password: CENTRAL_PASSWORD
+
+      - name: Build, test, sign, and upload to Central
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+          MAVEN_GPG_KEY: ${{ secrets.MAVEN_GPG_KEY }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: |
+          ./mvnw -B --no-transfer-progress -Pcentral clean deploy \
+            -Dorafit.release.jar.sha256="$RELEASE_JAR_SHA256" \
+            -Dorafit.release.runtime.sha256="$RELEASE_RUNTIME_SHA256" \
+            -Dcentral.autoPublish=${{ inputs.publish }} \
+            -Dcentral.waitUntil=${{ inputs.publish && 'published' || 'validated' }}
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Maven Central"
+            echo ""
+            echo "- coordinates: \`io.github.ltslab:orafit-jdbc:${{ inputs.version }}\`"
+            echo "- auto publish: \`${{ inputs.publish }}\`"
+            echo "- deployments: https://central.sonatype.com/publishing/deployments"
+          } >> "$GITHUB_STEP_SUMMARY"
