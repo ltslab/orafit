@@ -88,7 +88,7 @@ SELECT orafit.apply_byte_length_semantics('public');
 
 Orafit JARとpgJDBCをアプリケーションのクラスパスへ追加します。JSqlParserはOrafit JARへシェードされています。pgJDBCは意図的に同梱していないため、利用するバージョンをアプリケーション側で管理できます。
 
-OrafitはMaven Centralで`io.github.ltslab:orafit-jdbc`として公開しています。テストスイートはpgJDBC 42.7.13で実行しています。
+OrafitはMaven Centralで`io.github.ltslab:orafit-jdbc`として公開しています。テストスイートはpgJDBC 42.7.14で実行しています。
 
 ```xml
 <dependency>
@@ -99,13 +99,13 @@ OrafitはMaven Centralで`io.github.ltslab:orafit-jdbc`として公開してい�
 <dependency>
   <groupId>org.postgresql</groupId>
   <artifactId>postgresql</artifactId>
-  <version>42.7.13</version>
+  <version>42.7.14</version>
 </dependency>
 ```
 
 ```kotlin
 implementation("io.github.ltslab:orafit-jdbc:1.0.0")
-implementation("org.postgresql:postgresql:42.7.13")
+implementation("org.postgresql:postgresql:42.7.14")
 ```
 
 サーバーランタイムも`io.github.ltslab:orafit-jdbc:1.0.0:runtime@tar.gz`として同時に公開しています。GitHub Releaseのファイルと同一です。

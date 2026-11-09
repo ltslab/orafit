@@ -88,7 +88,7 @@ Use this only when the affected source columns use BYTE semantics and the Oracle
 
 Put the Orafit JAR and pgJDBC on the application classpath. JSqlParser is shaded into the Orafit JAR; pgJDBC is intentionally not bundled so the application controls its pgJDBC version.
 
-Orafit is published on Maven Central as `io.github.ltslab:orafit-jdbc`. The test suite runs with pgJDBC 42.7.13.
+Orafit is published on Maven Central as `io.github.ltslab:orafit-jdbc`. The test suite runs with pgJDBC 42.7.14.
 
 ```xml
 <dependency>
@@ -99,13 +99,13 @@ Orafit is published on Maven Central as `io.github.ltslab:orafit-jdbc`. The test
 <dependency>
   <groupId>org.postgresql</groupId>
   <artifactId>postgresql</artifactId>
-  <version>42.7.13</version>
+  <version>42.7.14</version>
 </dependency>
 ```
 
 ```kotlin
 implementation("io.github.ltslab:orafit-jdbc:1.0.0")
-implementation("org.postgresql:postgresql:42.7.13")
+implementation("org.postgresql:postgresql:42.7.14")
 ```
 
 The server runtime is published alongside as `io.github.ltslab:orafit-jdbc:1.0.0:runtime@tar.gz`, identical to the GitHub Release asset.

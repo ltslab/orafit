@@ -59,7 +59,7 @@
     <jsqlparser.version>5.3.218</jsqlparser.version>
     <junit.version>5.14.4</junit.version>
     <tomlj.version>1.1.1</tomlj.version>
-    <postgresql.version>42.7.13</postgresql.version>
+    <postgresql.version>42.7.14</postgresql.version>
     <embedded-postgres.version>2.2.2</embedded-postgres.version>
     <embedded-postgres-binaries.version>17.10.0</embedded-postgres-binaries.version>
     <hikari.version>6.3.3</hikari.version>
