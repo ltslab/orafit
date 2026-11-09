@@ -268,7 +268,7 @@ id = "set-operations"
 area = "query"
 scope = "owned"
 contract = "same"
-evidence = ["scope.union-distinct", "scope.union-all", "scope.intersect-distinct", "set.minus-distinct"]
+evidence = ["scope.union-distinct", "scope.union-all", "scope.intersect-distinct", "set.minus-distinct", "set.char-width-same-columns", "set.char-width-different-columns", "set.char-width-char-varchar"]
 
 [[feature]]
 id = "analytic-default-range-frame"

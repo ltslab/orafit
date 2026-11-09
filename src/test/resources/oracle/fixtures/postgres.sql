@@ -8,6 +8,8 @@ DROP TABLE IF EXISTS bs_events CASCADE;
 -- @statement
 DROP TABLE IF EXISTS bs_byte_length CASCADE;
 -- @statement
+DROP TABLE IF EXISTS bs_char_width CASCADE;
+-- @statement
 DROP TABLE IF EXISTS bs_model CASCADE;
 -- @statement
 DROP TABLE IF EXISTS bs_wide CASCADE;
@@ -191,6 +193,22 @@ INSERT INTO bs_byte_length VALUES (9, 'A', 'A');
 
 -- @statement
 INSERT INTO bs_byte_length VALUES (10, 'B', NULL);
+
+-- @statement
+CREATE TABLE bs_char_width (
+    id     numeric(4) PRIMARY KEY,
+    code2  char(2),
+    code3  char(3),
+    text3  varchar(3)
+);
+-- @statement
+INSERT INTO bs_char_width VALUES (1, 'A', 'A', 'A');
+
+-- @statement
+INSERT INTO bs_char_width VALUES (2, 'B', 'B', 'B  ');
+
+-- @statement
+INSERT INTO bs_char_width VALUES (3, NULL, 'C', NULL);
 
 -- @statement
 SELECT orafit.apply_byte_length_semantics('public');

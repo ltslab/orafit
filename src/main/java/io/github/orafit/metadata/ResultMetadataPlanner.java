@@ -73,8 +73,13 @@ public final class ResultMetadataPlanner {
                     && DatabaseTypeCoercionRule.expressionKind(
                                     subtraction.getRightExpression(), select, resolver)
                             == ColumnTypeResolver.Kind.DATE) type = ExpressionMetadata.number(0);
+            boolean physicalSet = false;
             if (statement instanceof SetOperationList set) {
                 Column setType = setColumnType(set, columns.size());
+                if (setType.kind() == Kind.AUTO) {
+                    setType = physicalCharSetType(set, columns.size(), resolver);
+                    physicalSet = setType.kind() != Kind.AUTO;
+                }
                 if (setType.kind() != Kind.AUTO) type = setType;
             }
             columns.add(
@@ -84,12 +89,22 @@ public final class ResultMetadataPlanner {
                             type.precision(),
                             type.scale(),
                             type.precisionBind(),
-                            source(select, expression),
+                            // A set column is not the first branch's source column.
+                            physicalSet ? null : source(select, expression),
                             optional(select, expression) ? 1 : null,
                             type.padFromSource(),
                             type.paddingFallback()));
         }
         return new ResultMetadataPlan(columns);
+    }
+
+    /** Reports CHAR(n) or VARCHAR2(n) when physical column widths prove the set datatype. */
+    private static Column physicalCharSetType(
+            SetOperationList set, int index, ColumnTypeResolver resolver) {
+        DatabaseTypeCoercionRule.CharSetType type =
+                DatabaseTypeCoercionRule.charSetType(set, index, resolver);
+        if (type == null || type.width() == null) return new Column(null, Kind.AUTO, null, null);
+        return new Column(null, type.fixed() ? Kind.CHAR : Kind.VARCHAR2, type.width(), 0);
     }
 
     /** Resolves character set outputs using the same widths as scalar metadata. */

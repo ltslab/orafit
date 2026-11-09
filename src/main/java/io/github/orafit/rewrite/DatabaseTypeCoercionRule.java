@@ -112,31 +112,26 @@ public final class DatabaseTypeCoercionRule {
         }
         for (int index = 0; index < width; index++) {
             var setType = io.github.orafit.metadata.ResultMetadataPlanner.setColumnType(set, index);
+            boolean varchar2 =
+                    setType.kind() == io.github.orafit.translation.ResultMetadataPlan.Kind.VARCHAR2;
+            Integer varcharWidth = varchar2 ? setType.precision() : null;
             if (setType.kind() == io.github.orafit.translation.ResultMetadataPlan.Kind.AUTO) {
-                for (PlainSelect select : branches) {
-                    if (outputKind(select, index, resolver, inherited)
-                            == ColumnTypeResolver.Kind.FIXED_CHAR)
-                        throw new ResolutionFailure(
-                                new TranslationException(
-                                        "SET_CHAR_WIDTH",
-                                        "CHAR set operations require explicit character widths in every branch"));
+                boolean fixed = false;
+                for (PlainSelect select : branches)
+                    fixed |=
+                            outputKind(select, index, resolver, inherited)
+                                    == ColumnTypeResolver.Kind.FIXED_CHAR;
+                if (fixed) {
+                    CharSetType physical = physicalSetType(branches, index, resolver, inherited);
+                    varchar2 = !physical.fixed();
+                    varcharWidth = physical.width();
                 }
             }
-            if (setType.kind() == io.github.orafit.translation.ResultMetadataPlan.Kind.VARCHAR2) {
-                for (PlainSelect select : branches) {
+            if (varchar2) {
+                for (PlainSelect select : branches)
                     if (outputKind(select, index, resolver, inherited)
-                            == ColumnTypeResolver.Kind.FIXED_CHAR) {
-                        var item = select.getSelectItems().get(index);
-                        select.getSelectItems()
-                                .set(
-                                        index,
-                                        SelectItem.from(
-                                                new Function(
-                                                        "orafit.char_text", item.getExpression()),
-                                                item.getAlias()));
-                        change.changed = true;
-                    }
-                }
+                            == ColumnTypeResolver.Kind.FIXED_CHAR)
+                        preserveCharText(select, index, varcharWidth, resolver, inherited, change);
             }
             boolean number = false;
             for (PlainSelect select : branches) {
@@ -147,6 +142,176 @@ public final class DatabaseTypeCoercionRule {
             for (PlainSelect select : branches)
                 coerceOutput(select, index, resolver, inherited, change);
         }
+    }
+
+    /** Oracle character datatype of one set-operation output column. */
+    public record CharSetType(boolean fixed, Integer width) {}
+
+    /**
+     * Resolves the Oracle datatype of a character set-operation column from physical metadata, or
+     * returns {@code null} when no branch is a physical CHAR or the type cannot be proven.
+     */
+    public static CharSetType charSetType(
+            SetOperationList set, int index, ColumnTypeResolver resolver) {
+        if (resolver == ColumnTypeResolver.NONE
+                || set.getSelects() == null
+                || set.getSelects().size() < 2) return null;
+        try {
+            Map<String, Map<String, ColumnTypeResolver.Kind>> inherited = cteKinds(set, resolver);
+            List<PlainSelect> branches = new java.util.ArrayList<>();
+            for (Select branch : set.getSelects()) {
+                PlainSelect select = plainBranch(branch);
+                if (select == null || select.getSelectItems() == null) return null;
+                branches.add(select);
+            }
+            boolean fixed = false;
+            for (PlainSelect select : branches)
+                fixed |=
+                        outputKind(select, index, resolver, inherited)
+                                == ColumnTypeResolver.Kind.FIXED_CHAR;
+            return fixed ? physicalSetType(branches, index, resolver, inherited) : null;
+        } catch (ResolutionFailure | IndexOutOfBoundsException failure) {
+            return null;
+        }
+    }
+
+    /**
+     * Applies Oracle's character set-operation datatype rule when the CHAR widths come from
+     * physical metadata: equal CHAR widths keep CHAR(n), while different widths or any VARCHAR2
+     * branch produce VARCHAR2 of the largest width. Branches whose character type cannot be proven
+     * are rejected.
+     */
+    private static CharSetType physicalSetType(
+            List<PlainSelect> branches,
+            int index,
+            ColumnTypeResolver resolver,
+            Map<String, Map<String, ColumnTypeResolver.Kind>> inherited) {
+        Integer fixedWidth = null;
+        int maximum = 0;
+        boolean varchar2 = false;
+        boolean unknownWidth = false;
+        for (PlainSelect select : branches) {
+            Output output = output(select, index);
+            if (output == null) throw setCharWidth();
+            Expression value = output.expression();
+            if (value instanceof NullValue) continue;
+            Scope scope = Scope.from(output.owner(), resolver, inherited);
+            Integer current;
+            if (value instanceof StringValue literal) {
+                current = literalWidth(literal);
+            } else {
+                ColumnTypeResolver.Kind type = kind(value, scope);
+                if (type == ColumnTypeResolver.Kind.TEXT) {
+                    varchar2 = true;
+                    Integer width = value instanceof Column column ? scope.width(column) : null;
+                    if (width == null) unknownWidth = true;
+                    else maximum = Math.max(maximum, width);
+                    continue;
+                }
+                current =
+                        type == ColumnTypeResolver.Kind.FIXED_CHAR ? charWidth(value, scope) : null;
+            }
+            if (current == null) throw setCharWidth();
+            maximum = Math.max(maximum, current);
+            if (fixedWidth == null) fixedWidth = current;
+            else if (!fixedWidth.equals(current)) varchar2 = true;
+        }
+        if (!varchar2) return new CharSetType(true, fixedWidth);
+        return new CharSetType(false, unknownWidth ? null : maximum);
+    }
+
+    private static ResolutionFailure setCharWidth() {
+        return new ResolutionFailure(
+                new TranslationException(
+                        "SET_CHAR_WIDTH",
+                        "CHAR set operations require explicit character widths in every branch"));
+    }
+
+    /** Oracle text literals are CHAR; only ASCII literals have one width in both length units. */
+    private static Integer literalWidth(StringValue literal) {
+        if (literal.getPrefix() != null) return null;
+        String value = literal.getValue();
+        if (value.isEmpty() || value.contains("''")) return null;
+        for (int i = 0; i < value.length(); i++) if (value.charAt(i) > 0x7f) return null;
+        return value.length();
+    }
+
+    private static Integer charWidth(Expression value, Scope scope) {
+        if (value instanceof Column column) return scope.width(column);
+        if (value instanceof CastExpression cast && cast.getColDataType() != null) {
+            String type = cast.getColDataType().getDataType().toUpperCase(Locale.ROOT).strip();
+            List<String> arguments = cast.getColDataType().getArgumentsStringList();
+            if (!type.matches("CHAR|BPCHAR") || arguments == null || arguments.size() != 1)
+                return null;
+            String length = arguments.get(0).strip();
+            return length.matches("[1-9][0-9]{0,4}") ? Integer.valueOf(length) : null;
+        }
+        if (value instanceof Function lowered
+                && "orafit.cast_char".equalsIgnoreCase(lowered.getName())
+                && lowered.getParameters() != null
+                && lowered.getParameters().size() == 3
+                && lowered.getParameters().get(1) instanceof LongValue length
+                && lowered.getParameters().get(2)
+                        instanceof net.sf.jsqlparser.expression.BooleanValue bytes
+                && bytes.getValue()) return Math.toIntExact(length.getValue());
+        if (value instanceof Function function
+                && function.getName() != null
+                && List.of("MIN", "MAX").contains(function.getName().toUpperCase(Locale.ROOT))
+                && !function.isDistinct()
+                && function.getParameters() != null
+                && function.getParameters().size() == 1)
+            return charWidth(function.getParameters().get(0), scope);
+        return null;
+    }
+
+    private record Output(PlainSelect owner, Expression expression) {}
+
+    /** Finds the projected expression at {@code index}, descending through {@code SELECT *}. */
+    private static Output output(PlainSelect select, int index) {
+        if (select.getSelectItems().size() == 1
+                && select.getSelectItems().get(0).getExpression() instanceof AllColumns) {
+            if (!(select.getFromItem() instanceof ParenthesedSelect nested)
+                    || select.getJoins() != null) return null;
+            PlainSelect inner = plainBranch(nested.getSelect());
+            return inner == null || inner.getSelectItems() == null ? null : output(inner, index);
+        }
+        if (index >= select.getSelectItems().size()) return null;
+        Expression expression = select.getSelectItems().get(index).getExpression();
+        return expression instanceof AllColumns ? null : new Output(select, expression);
+    }
+
+    private static void preserveCharText(
+            PlainSelect select,
+            int index,
+            Integer width,
+            ColumnTypeResolver resolver,
+            Map<String, Map<String, ColumnTypeResolver.Kind>> inherited,
+            Change change) {
+        SelectItem<?> first = select.getSelectItems().get(0);
+        if (first.getExpression() instanceof AllColumns
+                && select.getFromItem() instanceof ParenthesedSelect nested) {
+            PlainSelect inner = plainBranch(nested.getSelect());
+            if (inner == null || inner.getSelectItems() == null) throw setCharWidth();
+            preserveCharText(inner, index, width, resolver, inherited, change);
+            return;
+        }
+        var item = select.getSelectItems().get(index);
+        if (kind(item.getExpression(), Scope.from(select, resolver, inherited))
+                != ColumnTypeResolver.Kind.FIXED_CHAR) return;
+        // orafit.char_text keeps CHAR blank padding; the bounded VARCHAR cast reports the
+        // Oracle VARCHAR2 width even where the set is nested below another projection.
+        Expression text = new Function("orafit.char_text", item.getExpression());
+        if (width != null) text = new CastExpression(text, "varchar(" + width + ")");
+        select.getSelectItems().set(index, SelectItem.from(text, outputAlias(item)));
+        change.changed = true;
+    }
+
+    /** Keeps the projected column name when wrapping a bare column reference. */
+    private static net.sf.jsqlparser.expression.Alias outputAlias(SelectItem<?> item) {
+        if (item.getAlias() != null) return item.getAlias();
+        if (item.getExpression() instanceof Column column)
+            return new net.sf.jsqlparser.expression.Alias(column.getColumnName(), true);
+        return null;
     }
 
     private static PlainSelect plainBranch(Select select) {
@@ -672,11 +837,43 @@ public final class DatabaseTypeCoercionRule {
         return ColumnTypeResolver.Kind.UNKNOWN;
     }
 
+    /** Resolves the CHAR width of a named output column of a derived table or CTE. */
+    private static Integer namedWidth(Select select, String name, ColumnTypeResolver resolver) {
+        if (select instanceof ParenthesedSelect nested)
+            return namedWidth(nested.getSelect(), name, resolver);
+        if (select instanceof SetOperationList set && set.getSelects() != null) {
+            Integer result = null;
+            for (Select branch : set.getSelects()) {
+                Integer current = namedWidth(branch, name, resolver);
+                if (current == null || (result != null && !result.equals(current))) return null;
+                result = current;
+            }
+            return result;
+        }
+        if (!(select instanceof PlainSelect plain) || plain.getSelectItems() == null) return null;
+        Scope scope = Scope.from(plain, resolver);
+        if (plain.getSelectItems().size() == 1
+                && plain.getSelectItems().get(0).getExpression() instanceof AllColumns)
+            return scope.width(new Column(name));
+        for (SelectItem<?> item : plain.getSelectItems()) {
+            String output =
+                    item.getAlias() != null
+                            ? item.getAlias().getUnquotedName()
+                            : item.getExpression() instanceof Column column
+                                    ? column.getUnquotedColumnName()
+                                    : null;
+            if (output != null && output.equalsIgnoreCase(name))
+                return charWidth(item.getExpression(), scope);
+        }
+        return null;
+    }
+
     private static final class Scope {
         private final ColumnTypeResolver resolver;
         private final Map<String, Relation> relations = new LinkedHashMap<>();
         private final Map<String, Map<String, ColumnTypeResolver.Kind>> derived =
                 new LinkedHashMap<>();
+        private final Map<String, Select> derivedSelects = new LinkedHashMap<>();
 
         private Scope(ColumnTypeResolver resolver) {
             this.resolver = resolver;
@@ -694,10 +891,12 @@ public final class DatabaseTypeCoercionRule {
             scope.derived.putAll(inherited);
             if (select.getWithItemsList() != null)
                 for (WithItem<?> item : select.getWithItemsList())
-                    if (item.getParenthesedStatement() instanceof ParenthesedSelect nested)
+                    if (item.getParenthesedStatement() instanceof ParenthesedSelect nested) {
+                        String name = item.getUnquotedAliasName().toLowerCase(Locale.ROOT);
                         scope.derived.put(
-                                item.getUnquotedAliasName().toLowerCase(Locale.ROOT),
-                                outputKinds(nested.getSelect(), resolver, scope.derived));
+                                name, outputKinds(nested.getSelect(), resolver, scope.derived));
+                        scope.derivedSelects.put(name, nested.getSelect());
+                    }
             scope.add(select.getFromItem());
             if (select.getJoins() != null)
                 for (Join join : select.getJoins()) scope.add(join.getFromItem());
@@ -754,6 +953,38 @@ public final class DatabaseTypeCoercionRule {
             }
         }
 
+        /** Resolves the physical CHAR width of a column visible in this scope, if provable. */
+        Integer width(Column column) {
+            String name = column.getUnquotedColumnName();
+            String qualifier = column.getUnquotedTableName();
+            if (qualifier != null) {
+                String key = qualifier.toLowerCase(Locale.ROOT);
+                Relation relation = relations.get(key);
+                if (relation != null) return physicalWidth(relation, name);
+                Select definition = derivedSelects.get(key);
+                return definition == null ? null : namedWidth(definition, name, resolver);
+            }
+            if (resolveUnqualified(column) == ColumnTypeResolver.Kind.UNKNOWN) return null;
+            for (Relation relation : relations.values().stream().distinct().toList())
+                if (resolved(relation, column) != ColumnTypeResolver.Kind.UNKNOWN)
+                    return physicalWidth(relation, name);
+            String key = name.toLowerCase(Locale.ROOT);
+            for (Map.Entry<String, Map<String, ColumnTypeResolver.Kind>> entry : derived.entrySet())
+                if (entry.getValue().containsKey(key)) {
+                    Select definition = derivedSelects.get(entry.getKey());
+                    return definition == null ? null : namedWidth(definition, name, resolver);
+                }
+            return null;
+        }
+
+        private Integer physicalWidth(Relation relation, String column) {
+            try {
+                return resolver.charLength(relation.schema(), relation.table(), column);
+            } catch (TranslationException failure) {
+                throw new ResolutionFailure(failure);
+            }
+        }
+
         ColumnTypeResolver.Kind target(Column column) {
             Relation relation = unique();
             if (relation == null) return ColumnTypeResolver.Kind.UNKNOWN;
@@ -768,17 +999,22 @@ public final class DatabaseTypeCoercionRule {
 
         private void add(FromItem item) {
             if (item instanceof ParenthesedSelect nested && nested.getAlias() != null) {
-                derived.put(
-                        nested.getAlias().getUnquotedName().toLowerCase(Locale.ROOT),
-                        outputKinds(nested.getSelect(), resolver, derived));
+                String name = nested.getAlias().getUnquotedName().toLowerCase(Locale.ROOT);
+                derived.put(name, outputKinds(nested.getSelect(), resolver, derived));
+                derivedSelects.put(name, nested.getSelect());
                 return;
             }
             if (!(item instanceof Table table)) return;
             Map<String, ColumnTypeResolver.Kind> cte =
                     derived.get(table.getUnquotedName().toLowerCase(Locale.ROOT));
             if (cte != null) {
-                if (table.getAlias() != null)
-                    derived.put(table.getAlias().getUnquotedName().toLowerCase(Locale.ROOT), cte);
+                if (table.getAlias() != null) {
+                    String alias = table.getAlias().getUnquotedName().toLowerCase(Locale.ROOT);
+                    derived.put(alias, cte);
+                    Select definition =
+                            derivedSelects.get(table.getUnquotedName().toLowerCase(Locale.ROOT));
+                    if (definition != null) derivedSelects.put(alias, definition);
+                }
                 return;
             }
             Relation relation = Relation.from(table);

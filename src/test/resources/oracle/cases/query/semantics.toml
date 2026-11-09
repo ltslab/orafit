@@ -580,8 +580,8 @@ outcome = "success"
 mode = "same"
 
 [[case]]
-id = "p2.reject-unknown-set-char-width"
-title = "Physical CHAR set width must be explicit"
+id = "set.char-width-physical-cast"
+title = "Physical CHAR(3) and CAST CHAR(4) branches become VARCHAR2 without padding loss"
 kind = "query"
 compare = "unordered"
 sql = """
@@ -593,10 +593,217 @@ UNION SELECT CAST('A' AS CHAR(4)) AS value FROM dual
 outcome = "success"
 
 [case.orafit]
+mode = "same"
+offline_code = "SET_CHAR_WIDTH"
+
+
+[[case]]
+id = "set.char-width-same-columns"
+title = "Equal physical CHAR widths keep CHAR(n)"
+kind = "query"
+compare = "unordered"
+sql = """
+SELECT code3 AS value FROM bs_char_width
+UNION SELECT code3 FROM bs_char_width
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+
+[[case]]
+id = "set.char-width-different-columns"
+title = "Different physical CHAR widths keep blank-padded values distinct"
+kind = "query"
+compare = "unordered"
+sql = """
+SELECT code2 AS value FROM bs_char_width
+UNION SELECT code3 FROM bs_char_width
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+
+[[case]]
+id = "set.char-width-char-varchar"
+title = "CHAR and VARCHAR2 branches become VARCHAR2 with CHAR padding preserved"
+kind = "query"
+compare = "unordered"
+sql = """
+SELECT code3 AS value FROM bs_char_width
+UNION SELECT text3 FROM bs_char_width
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+
+[[case]]
+id = "set.char-width-equal-literal"
+title = "A text literal of the same width keeps CHAR(n)"
+kind = "query"
+compare = "unordered"
+sql = """
+SELECT code3 AS value FROM bs_char_width
+UNION ALL SELECT 'XYZ' FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+
+[[case]]
+id = "set.char-width-short-literal"
+title = "A shorter text literal makes the set VARCHAR2"
+kind = "query"
+compare = "unordered"
+sql = """
+SELECT code3 AS value FROM bs_char_width
+UNION SELECT 'A' FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+
+[[case]]
+id = "set.char-width-null-branch"
+title = "A NULL branch does not change the CHAR width"
+kind = "query"
+compare = "unordered"
+sql = """
+SELECT code3 AS value FROM bs_char_width
+UNION ALL SELECT NULL FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+
+[[case]]
+id = "set.char-width-aggregate"
+title = "MAX over CHAR columns keeps each physical width"
+kind = "query"
+compare = "unordered"
+sql = """
+SELECT MAX(code2) AS value FROM bs_char_width
+UNION SELECT MAX(code3) FROM bs_char_width
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+
+[[case]]
+id = "set.char-width-derived-star"
+title = "SELECT * over a nested CHAR set keeps first-branch column names"
+kind = "query"
+compare = "unordered"
+sql = """
+SELECT * FROM (
+  SELECT id, code2 FROM bs_char_width
+  UNION ALL SELECT id, code3 FROM bs_char_width
+)
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+
+[[case]]
+id = "set.char-width-unaliased-first-branch"
+title = "Padding-preserving rewrite keeps the unaliased first-branch column name"
+kind = "query"
+compare = "unordered"
+sql = """
+SELECT code2 FROM bs_char_width
+UNION ALL SELECT code3 FROM bs_char_width
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "set.char-width-qualified-join"
+title = "Qualified CHAR columns from joined tables resolve their physical widths"
+kind = "query"
+compare = "unordered"
+sql = """
+SELECT w.code2 AS value FROM bs_char_width w JOIN bs_byte_length b ON b.id = w.id + 8
+UNION SELECT b.fixed_value FROM bs_char_width w JOIN bs_byte_length b ON b.id = w.id + 8
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+
+[[case]]
+id = "set.char-width-derived-branch"
+title = "CHAR widths resolve through an aliased derived table"
+kind = "query"
+compare = "unordered"
+sql = """
+SELECT d.code2 AS value FROM (SELECT code2 FROM bs_char_width) d
+UNION SELECT code3 FROM bs_char_width
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+
+[[case]]
+id = "p2.reject-unknown-set-char-width"
+title = "CHAR set branch with an unproven width is rejected"
+kind = "query"
+compare = "unordered"
+sql = """
+SELECT NVL(code3, 'Z') AS value FROM bs_char_width
+UNION SELECT code2 FROM bs_char_width
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
 mode = "reject"
-stage = "translation"
+stage = "runtime"
 code = "SET_CHAR_WIDTH"
-reason = "Physical CHAR set widths need explicit casts on every branch; no padding approximation"
+reason = "CHAR set widths must be proven from physical metadata or explicit casts; no padding approximation"
+
 
 [[case]]
 # Observed 実行結果: Oracle ORA-02287; Orafit 成功.

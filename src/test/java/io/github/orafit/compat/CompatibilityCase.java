@@ -13,6 +13,7 @@ public record CompatibilityCase(
         Mode mode,
         String orafitCode,
         RejectStage rejectStage,
+        String offlineCode,
         boolean compareTypeName,
         String sql,
         String observeSql,

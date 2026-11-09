@@ -6,6 +6,8 @@ BEGIN EXECUTE IMMEDIATE 'DROP TABLE bs_events PURGE'; EXCEPTION WHEN OTHERS THEN
 -- @statement
 BEGIN EXECUTE IMMEDIATE 'DROP TABLE bs_byte_length PURGE'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
 -- @statement
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE bs_char_width PURGE'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+-- @statement
 BEGIN EXECUTE IMMEDIATE 'DROP TABLE bs_model PURGE'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
 -- @statement
 BEGIN EXECUTE IMMEDIATE 'DROP TABLE bs_wide PURGE'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
@@ -215,6 +217,22 @@ INSERT INTO bs_byte_length VALUES (9, 'A', 'A')
 
 -- @statement
 INSERT INTO bs_byte_length VALUES (10, 'B', NULL)
+
+-- @statement
+CREATE TABLE bs_char_width (
+    id     NUMBER(4) PRIMARY KEY,
+    code2  CHAR(2),
+    code3  CHAR(3),
+    text3  VARCHAR2(3)
+)
+-- @statement
+INSERT INTO bs_char_width VALUES (1, 'A', 'A', 'A')
+
+-- @statement
+INSERT INTO bs_char_width VALUES (2, 'B', 'B', 'B  ')
+
+-- @statement
+INSERT INTO bs_char_width VALUES (3, NULL, 'C', NULL)
 
 -- @statement
 CREATE SEQUENCE bs_seq START WITH 100 INCREMENT BY 1 NOCACHE
