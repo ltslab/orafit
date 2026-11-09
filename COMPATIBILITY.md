@@ -282,9 +282,9 @@ Before changing the JDBC URL, check whether the application depends on Oracle be
 From a repository checkout, the compatibility analyzer can measure the SQL shapes actually used by an application:
 
 ```bash
-./mvnw -q -DskipTests package
-java -jar target/orafit-jdbc-*.jar src/main/resources
-java -jar target/orafit-jdbc-*.jar --details path/to/sql
+./mvnw -q -DskipTests package dependency:copy-dependencies -DincludeScope=runtime
+java -cp "target/orafit-jdbc-*.jar:target/dependency/*" io.github.orafit.tools.CompatibilityAnalyzer src/main/resources
+java -cp "target/orafit-jdbc-*.jar:target/dependency/*" io.github.orafit.tools.CompatibilityAnalyzer --details path/to/sql
 ```
 
 Directories are scanned recursively for `*.sql` files. The analyzer reuses the same `OrafitEngine`, feature gate, fail-closed codes, and pinned JSqlParser as runtime translation. It reports accepted pass-through/rewritten statements, rejected statements grouped by stable rejection code, out-of-scope statement types, and recognized Oracle-feature frequency. It does not log SQL text in the detailed rejection list.

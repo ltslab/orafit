@@ -6,7 +6,7 @@ One release is one deployment bundle:
 
 ```
 io/github/ltslab/orafit-jdbc/<version>/orafit-jdbc-<version>.pom
-                                       .jar              # shaded driver + analyzer CLI
+                                       .jar              # driver + analyzer CLI (JSqlParser is a POM dependency)
                                        -sources.jar
                                        -javadoc.jar
                                        -runtime.tar.gz   # native/ + plain/ SQL

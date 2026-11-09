@@ -86,7 +86,7 @@ SELECT orafit.apply_byte_length_semantics('public');
 
 ### 3. JDBCドライバーを追加する
 
-Orafit JARとpgJDBCをアプリケーションのクラスパスへ追加します。JSqlParserはOrafit JARへシェードされています。pgJDBCは意図的に同梱していないため、利用するバージョンをアプリケーション側で管理できます。
+Orafit JARとpgJDBCをアプリケーションのクラスパスへ追加します。OrafitはJSqlParser（`com.github.jsqlparser:jsqlparser`）に依存しており、MavenやGradleが推移的に解決します。変換はこのバージョンのパーサーで検証しているため、Orafitが宣言するバージョンを変えないでください。pgJDBCは意図的に依存に含めていないため、利用するバージョンをアプリケーション側で管理できます。
 
 OrafitはMaven Centralで`io.github.ltslab:orafit-jdbc`として公開しています。テストスイートはpgJDBC 42.7.13で実行しています。
 
@@ -125,11 +125,11 @@ Oracleでは1つのステートメントが失敗しても明示的なトラン�
 
 ## 移行前分析
 
-ビルド済みJARには、実行時と同じエンジン、機能ゲート、拒否コードを使うオフラインアナライザーも含まれます。
+JARには、実行時と同じエンジン、機能ゲート、拒否コードを使うオフラインアナライザーも含まれます。JSqlParserのJARをクラスパスに加えて実行します。
 
 ```bash
-java -jar orafit-jdbc-<version>.jar path/to/sql
-java -jar orafit-jdbc-<version>.jar --details path/to/sql
+java -cp "orafit-jdbc-<version>.jar:jsqlparser-<version>.jar" io.github.orafit.tools.CompatibilityAnalyzer path/to/sql
+java -cp "orafit-jdbc-<version>.jar:jsqlparser-<version>.jar" io.github.orafit.tools.CompatibilityAnalyzer --details path/to/sql
 ```
 
 ディレクトリを指定すると`*.sql`を再帰的にスキャンします。レポートには、パススルー、変換、安定したコード別の拒否、対象外ステートメント、認識されたOracle機能の頻度をまとめます。詳細出力ではSQL本文を表示せず、ファイルとステートメント番号を示します。
@@ -194,7 +194,6 @@ src/test/resources/oracle/
 ├── cases/**/*.toml     # Oracleから見える正規ケース
 └── fixtures/           # Oracle/PostgreSQL差分fixture
 docs/                   # 静的な製品サイト
-third-party/            # サードパーティーライセンス文
 .mvn/wrapper/           # 標準Maven Wrapper設定
 ```
 

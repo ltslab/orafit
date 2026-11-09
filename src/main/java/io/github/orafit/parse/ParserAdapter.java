@@ -12,7 +12,7 @@ import net.sf.jsqlparser.parser.Node;
 import net.sf.jsqlparser.parser.Provider;
 import net.sf.jsqlparser.parser.StringProvider;
 import net.sf.jsqlparser.parser.Token;
-import net.sf.jsqlparser.parser.TokenMgrError;
+import net.sf.jsqlparser.parser.TokenMgrException;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.create.view.CreateView;
@@ -83,7 +83,7 @@ public final class ParserAdapter {
                         || following == K_INTERSECT
                         || following == K_EXCEPT
                         || following == K_MINUS;
-            } catch (TokenMgrError ex) {
+            } catch (TokenMgrException ex) {
                 return false;
             }
         }
