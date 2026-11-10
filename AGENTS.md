@@ -36,7 +36,7 @@ Orafit is a Java 17 JDBC compatibility layer for Oracle-oriented SQL on PostgreS
 - Product code: `src/main/java/`
 - Tests and evidence: `src/test/`
 - Runtime SQL: `extension/src/`
-- Third-party notices: `third-party/`
+- Third-party notices: `THIRD_PARTY_NOTICES.md`
 - Local CI runner: `.github/workflows/ci.sh`, `.actrc`
 - CI orchestration: `.github/workflows/ci.yml`
 

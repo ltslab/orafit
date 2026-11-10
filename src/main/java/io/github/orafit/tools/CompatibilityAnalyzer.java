@@ -185,7 +185,7 @@ public final class CompatibilityAnalyzer {
 
     private static void usage() {
         System.out.println(
-                "Usage: java -jar orafit-jdbc-<version>.jar [--details] <sql-file-or-directory>...");
+                "Usage: java -cp \"orafit-jdbc-<version>.jar:jsqlparser-<version>.jar\" io.github.orafit.tools.CompatibilityAnalyzer [--details] <sql-file-or-directory>...");
         System.out.println("Directories are scanned recursively for *.sql files.");
     }
 

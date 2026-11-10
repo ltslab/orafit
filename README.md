@@ -86,7 +86,7 @@ Use this only when the affected source columns use BYTE semantics and the Oracle
 
 ### 3. Add the JDBC driver
 
-Put the Orafit JAR and pgJDBC on the application classpath. JSqlParser is shaded into the Orafit JAR; pgJDBC is intentionally not bundled so the application controls its pgJDBC version.
+Put the Orafit JAR and pgJDBC on the application classpath. Orafit depends on JSqlParser (`com.github.jsqlparser:jsqlparser`), which Maven and Gradle resolve transitively; keep the version Orafit declares, because translation is tested against that exact parser. pgJDBC is intentionally not a dependency so the application controls its pgJDBC version.
 
 Orafit is published on Maven Central as `io.github.ltslab:orafit-jdbc`. The test suite runs with pgJDBC 42.7.14.
 
@@ -125,11 +125,11 @@ Explicit pgJDBC properties override these defaults, and URL parameters override 
 
 ## Pre-migration analysis
 
-The built JAR also provides an offline analyzer that uses the same engine, feature gate, and rejection codes as the runtime:
+The JAR also provides an offline analyzer that uses the same engine, feature gate, and rejection codes as the runtime. Run it with the JSqlParser JAR on the class path:
 
 ```bash
-java -jar orafit-jdbc-<version>.jar path/to/sql
-java -jar orafit-jdbc-<version>.jar --details path/to/sql
+java -cp "orafit-jdbc-<version>.jar:jsqlparser-<version>.jar" io.github.orafit.tools.CompatibilityAnalyzer path/to/sql
+java -cp "orafit-jdbc-<version>.jar:jsqlparser-<version>.jar" io.github.orafit.tools.CompatibilityAnalyzer --details path/to/sql
 ```
 
 Directories are scanned recursively for `*.sql`. The report groups pass-through statements, rewritten statements, rejections by stable code, out-of-scope statements, and recognized Oracle-feature frequency. Detailed output identifies files and statement ordinals without printing SQL text.
@@ -194,7 +194,6 @@ src/test/resources/oracle/
 ├── cases/**/*.toml     # canonical Oracle-visible cases
 └── fixtures/           # Oracle/PostgreSQL differential fixtures
 docs/                   # static product site
-third-party/            # third-party license texts
 .mvn/wrapper/           # standard Maven Wrapper configuration
 ```
 
