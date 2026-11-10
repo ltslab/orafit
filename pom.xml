@@ -6,7 +6,7 @@
 
   <groupId>io.github.ltslab</groupId>
   <artifactId>orafit-jdbc</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.1</version>
   <name>Orafit JDBC</name>
   <description>Oracle-oriented JDBC compatibility layer for PostgreSQL</description>
   <url>https://github.com/ltslab/orafit</url>
