@@ -94,7 +94,7 @@ OrafitはMaven Centralで`io.github.ltslab:orafit-jdbc`として公開してい�
 <dependency>
   <groupId>io.github.ltslab</groupId>
   <artifactId>orafit-jdbc</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.1</version>
 </dependency>
 <dependency>
   <groupId>org.postgresql</groupId>
@@ -104,11 +104,11 @@ OrafitはMaven Centralで`io.github.ltslab:orafit-jdbc`として公開してい�
 ```
 
 ```kotlin
-implementation("io.github.ltslab:orafit-jdbc:1.0.0")
+implementation("io.github.ltslab:orafit-jdbc:1.0.1")
 implementation("org.postgresql:postgresql:42.7.14")
 ```
 
-サーバーランタイムも`io.github.ltslab:orafit-jdbc:1.0.0:runtime@tar.gz`として同時に公開しています。GitHub Releaseのファイルと同一です。
+サーバーランタイムも`io.github.ltslab:orafit-jdbc:1.0.1:runtime@tar.gz`として同時に公開しています。GitHub Releaseのファイルと同一です。
 
 ```properties
 driver=io.github.orafit.jdbc.OrafitDriver
