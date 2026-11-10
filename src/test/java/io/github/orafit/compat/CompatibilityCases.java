@@ -109,6 +109,12 @@ public final class CompatibilityCases {
                     stage.isEmpty()
                             ? CompatibilityCase.RejectStage.TRANSLATION
                             : enumValue(CompatibilityCase.RejectStage.class, stage);
+            // A same case may depend on physical column metadata that offline translation lacks;
+            // offline_code declares the fail-closed rejection expected without that metadata.
+            String offlineCode = optionalString(orafit, "offline_code");
+            require(
+                    offlineCode.isEmpty() || mode == SAME,
+                    id + ": offline_code is valid only for same cases");
             if (mode == REJECT) {
                 require(!reason.isBlank(), id + ": reject requires reason");
             } else {
@@ -161,6 +167,7 @@ public final class CompatibilityCases {
                             mode,
                             code,
                             rejectStage,
+                            offlineCode,
                             compareTypeName,
                             sql,
                             observeSql,

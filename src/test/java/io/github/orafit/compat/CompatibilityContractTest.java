@@ -32,6 +32,13 @@ final class CompatibilityContractTest {
             assertEquals(test.orafitCode(), exception.code(), test.id());
             return;
         }
+        if (!test.offlineCode().isEmpty()) {
+            TranslationException exception =
+                    org.junit.jupiter.api.Assertions.assertThrows(
+                            TranslationException.class, () -> engine.translate(test.sql()));
+            assertEquals(test.offlineCode(), exception.code(), test.id());
+            return;
+        }
 
         try {
             Translation translation = engine.translate(test.sql());

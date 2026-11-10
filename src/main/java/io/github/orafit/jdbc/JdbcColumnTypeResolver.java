@@ -14,8 +14,13 @@ import java.util.Map;
 
 /** Connection-scoped PostgreSQL column metadata used by schema-dependent Oracle coercion. */
 final class JdbcColumnTypeResolver implements ColumnTypeResolver {
+    /** PostgreSQL's maximum declared length for {@code character(n)} and {@code varchar(n)}. */
+    private static final int MAX_BOUNDED_LENGTH = 10_485_760;
+
+    private record Physical(Kind kind, Integer charLength) {}
+
     private final Connection connection;
-    private final Map<String, Map<String, Kind>> tables = new HashMap<>();
+    private final Map<String, Map<String, Physical>> tables = new HashMap<>();
 
     JdbcColumnTypeResolver(Connection connection) {
         this.connection = connection;
@@ -23,16 +28,29 @@ final class JdbcColumnTypeResolver implements ColumnTypeResolver {
 
     @Override
     public Kind resolve(String schema, String table, String column) throws TranslationException {
-        if (table == null || column == null) return Kind.UNKNOWN;
+        Physical physical = physical(schema, table, column);
+        return physical == null ? Kind.UNKNOWN : physical.kind();
+    }
+
+    @Override
+    public Integer charLength(String schema, String table, String column)
+            throws TranslationException {
+        Physical physical = physical(schema, table, column);
+        return physical == null ? null : physical.charLength();
+    }
+
+    private Physical physical(String schema, String table, String column)
+            throws TranslationException {
+        if (table == null || column == null) return null;
         try {
             String effectiveSchema = schema == null ? visibleSchema(table) : schema;
             String key = (effectiveSchema + "." + table).toLowerCase(Locale.ROOT);
-            Map<String, Kind> columns = tables.get(key);
+            Map<String, Physical> columns = tables.get(key);
             if (columns == null) {
                 columns = load(effectiveSchema, table);
                 tables.put(key, columns);
             }
-            return columns.getOrDefault(column.toLowerCase(Locale.ROOT), Kind.UNKNOWN);
+            return columns.get(column.toLowerCase(Locale.ROOT));
         } catch (SQLException failure) {
             throw new TranslationException(
                     "COLUMN_METADATA", "Could not resolve " + table + "." + column, failure);
@@ -54,8 +72,8 @@ final class JdbcColumnTypeResolver implements ColumnTypeResolver {
         return connection.getSchema();
     }
 
-    private Map<String, Kind> load(String schema, String table) throws SQLException {
-        Map<String, Kind> result = new HashMap<>();
+    private Map<String, Physical> load(String schema, String table) throws SQLException {
+        Map<String, Physical> result = new HashMap<>();
         DatabaseMetaData metadata = connection.getMetaData();
         if (metadata == null) return result;
         for (String candidate :
@@ -65,14 +83,22 @@ final class JdbcColumnTypeResolver implements ColumnTypeResolver {
             try (ResultSet columns =
                     metadata.getColumns(connection.getCatalog(), schema, candidate, null)) {
                 while (columns != null && columns.next()) {
+                    Kind kind = kind(columns.getInt("DATA_TYPE"));
                     result.put(
                             columns.getString("COLUMN_NAME").toLowerCase(Locale.ROOT),
-                            kind(columns.getInt("DATA_TYPE")));
+                            new Physical(kind, charLength(kind, columns)));
                 }
             }
             if (!result.isEmpty()) break;
         }
         return result;
+    }
+
+    private static Integer charLength(Kind kind, ResultSet columns) throws SQLException {
+        if (kind != Kind.FIXED_CHAR && kind != Kind.TEXT) return null;
+        int size = columns.getInt("COLUMN_SIZE");
+        // pgJDBC reports unbounded character types with a sentinel such as Integer.MAX_VALUE.
+        return columns.wasNull() || size <= 0 || size > MAX_BOUNDED_LENGTH ? null : size;
     }
 
     private static Kind kind(int type) {

@@ -215,7 +215,7 @@ P1のコミットab6f780から`fix/oracle-p2-compatibility`を作成した。
 - NULLIF/COALESCEと同様、型が必要なEXTRACT・日時混在検査は既存の列型解決を使う。別のパーサや再解析を追加しない。
 - NVLはPL/pgSQLの関数境界で引数評価を保持。COALESCEの短絡評価は維持する。
 - シーケンスは通常SELECTの投影に限定する。DMLの重複NEXTVAL、集約・行数制限などを伴う重複参照は`SEQUENCE_PROJECTION`で拒否する。シーケンス自体の値を一時的に巻き戻す仕組みやセッションキャッシュは追加しない。
-- CHAR集合演算で列幅を確定できない場合は`SET_CHAR_WIDTH`で拒否し、各枝の明示CASTを要求する。この新規拒否契約も通常CIに追加した。
+- CHAR集合演算で列幅を確定できない場合は`SET_CHAR_WIDTH`で拒否し、各枝の明示CASTを要求する。この新規拒否契約も通常CIに追加した。（後に「CHAR集合演算の物理列幅」で、物理メタデータから幅を確定できる場合は拒否しないよう拡張した。）
 - `handover/`への追加・依存はない。製品コードは既存の型/メタデータ/SQLランタイムを拡張し、行単位のシーケンス投影だけを独立した小さなルールにした。
 
 ### P2のTDD・最終検証
@@ -328,3 +328,25 @@ P2のa4dc0d4から`fix/oracle-p3-validation`を作成。再評価文書と、こ
 - `./.github/workflows/ci.sh`: **Oracle 18c XE 18.4.0.0.0 対 embedded PostgreSQL 17.10、501件、Failures 0、Errors 0、Skipped 0、終了コード0**。ログ: `/tmp/orafit-p3-validation-oracle-final.log`。
 - 既存TOMLに追加したのは**25件、すべてsame**（元の再現2件＋境界23件）。別途ローカル統合テスト3件。既存P0/P1/P2の期待値・reject契約・検証方法は変更していない。
 - 元の67件は重複・欠落なし。**46件対応済み、21件未対応**。未対応の内訳はP2見送り3件、元P3の条件付き候補5件・見送り13件。探索で見つけた通常NEXTVAL列の投影メタデータ問題は67件の外であり、上記対応済み件数に含めない。
+
+## CHAR集合演算の物理列幅
+
+アプリケーションの実SQL（約44,000件のUTのうち1,097件、38文）が`SET_CHAR_WIDTH`で拒否された。
+いずれも`UNION`/`UNION ALL`の枝に物理`CHAR(n)`列をそのまま並べる形で、明示CASTは書かれていない。
+そこで、物理列の幅をPostgreSQLの列メタデータ（`COLUMN_SIZE`）から取得し、Oracleの規則で集合の型を決める。
+
+- 各枝の対応する列を、NULL、`CHAR(n)`（物理CHAR列、ASCIIの文字列リテラル、`CAST(... AS CHAR(n))`、CHAR列の`MIN`/`MAX`）、VARCHAR2（物理VARCHAR列など）に分類する。
+- すべての非NULLの枝が同じ幅の`CHAR(n)`なら`CHAR(n)`。書き換えない（PostgreSQLの`bpchar`の集合と値・重複排除が一致する）。
+- 幅が異なる、またはVARCHAR2の枝があれば、VARCHAR2（最大幅）。CHARの枝を`CAST(orafit.char_text(x) AS varchar(n))`にして空白の埋めを保ち、重複排除をOracleの非埋め比較と一致させる。別名のない列には元の列名を別名として付ける。
+- トップレベルの集合では、JDBCメタデータを`CHAR(n)`/`VARCHAR2(n)`として報告する。入れ子の集合では、上の`varchar(n)`により幅が伝わる。
+- 幅を確定できない枝（`NVL`などの関数、バインド、CHAR長セマンティクスの`CAST`、非ASCIIリテラル）がある場合は、従来どおり`SET_CHAR_WIDTH`で拒否する。オフライン翻訳（列メタデータなし）では物理列の型が分からないため、従来どおり拒否する（`offline_code`）。
+- 派生表・CTE・結合の修飾列・非修飾列は、既存の列型解決と同じ範囲で解決する。曖昧な非修飾列は確定できないものとして拒否する。
+
+`set.char-width-*`の12件（same）をquery/semantics.tomlに追加し、Oracle 18c XEと値・JDBCメタデータが一致することを確認した。
+従来の`p2.reject-unknown-set-char-width`は、物理幅とCASTの組み合わせが確定できるようになったため`set.char-width-physical-cast`（same）へ移し、同じIDは幅を確定できない`NVL`の枝の拒否（runtime）に置き換えた。
+
+### CHAR集合演算の最終検証
+
+- `./.github/workflows/ci.sh`: **Oracle 18c XE 18.4.0.0.0 対 embedded PostgreSQL 17.10、`OracleDifferentialIT` 513件、Failures 0、Errors 0、Skipped 0、終了コード0**（act、ジョブ成功）。`set.char-width-*`の12件を含む。
+- 実行したのは、この変更にpgJDBC 42.7.14とJSqlParser 5.4の更新を統合した`verify/all-improvements`。この節の変更はJava側とテスト資源だけで、他の2ブランチはテスト資源を変更しない。
+- ログは作業ディレクトリ外の一時領域に出力しており、リポジトリには保存していない。
