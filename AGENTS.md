@@ -39,6 +39,7 @@ Orafit is a Java 17 JDBC compatibility layer for Oracle-oriented SQL on PostgreS
 - Third-party notices: `THIRD_PARTY_NOTICES.md`
 - Local CI runner: `.github/workflows/ci.sh`, `.actrc`
 - CI orchestration: `.github/workflows/ci.yml`
+- Pages deployment (`docs/` only): `.github/workflows/pages.yml`
 
 ## Publishing
 

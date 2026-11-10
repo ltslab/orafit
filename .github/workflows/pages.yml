@@ -1,0 +1,34 @@
+name: Pages
+
+# Deploys docs/ only when it changes. The repository's Pages source must be set
+# to "GitHub Actions"; with the branch source GitHub rebuilds on every push to main.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v5.0.1
