@@ -52,7 +52,8 @@ final class ExpressionMetadata {
             if (name.startsWith("NUMBER")) return meta(Kind.NUMBER, null, null);
             if (name.startsWith("DATE")) return meta(Kind.DATE, 7, 0);
             if (name.startsWith("TIMESTAMP")) return meta(Kind.TIMESTAMP, 0, 9);
-            if (name.startsWith("CHAR")) return meta(Kind.CHAR, castWidth(cast), 0);
+            if (name.startsWith("CHAR") || name.equals("ORAFIT_CHAR_CS"))
+                return meta(Kind.CHAR, castWidth(cast), 0);
             if (name.startsWith("VARCHAR")) return meta(Kind.VARCHAR2, castWidth(cast), 0);
         }
         if (expression instanceof AnalyticExpression analytic

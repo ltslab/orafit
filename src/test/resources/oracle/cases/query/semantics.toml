@@ -1025,3 +1025,33 @@ outcome = "success"
 
 [case.orafit]
 mode = "same"
+
+[[case]]
+id = "char-length-cast.character-semantics"
+title = "CAST to CHAR(n CHAR) pads by characters, not bytes"
+kind = "query"
+compare = "unordered"
+sql = """
+SELECT CAST('É' AS CHAR(2 CHAR)) AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "char-length-cast.byte-semantics"
+title = "CAST to CHAR(n BYTE) and unqualified CHAR(n) pad by bytes"
+kind = "query"
+compare = "unordered"
+sql = """
+SELECT CAST('É' AS CHAR(2 BYTE)) AS value, CAST('É' AS CHAR(2)) AS plain FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"

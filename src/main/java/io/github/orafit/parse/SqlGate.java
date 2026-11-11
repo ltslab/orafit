@@ -8,6 +8,8 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** One-pass ordinary-SQL lexical normalization and feature gate. */
 public final class SqlGate {
@@ -399,6 +401,25 @@ public final class SqlGate {
                 continue;
             }
 
+            if (normalize && (c == 'C' || c == 'c') && charLengthType(sql, i) >= 0) {
+                int end = charLengthType(sql, i);
+                Matcher type = CHAR_LENGTH_TYPE.matcher(sql);
+                type.region(i, sql.length());
+                if (!type.lookingAt() || !precededByAs(sql, i))
+                    throw new TranslationException(
+                            "CHAR_LENGTH_SEMANTICS",
+                            "CHAR(n CHAR) is supported only as CAST(... AS CHAR(n CHAR))");
+                if (out == null) out = new StringBuilder(sql.length() + 16);
+                out.append(sql, copyFrom, i)
+                        .append(CHAR_LENGTH_CARRIER)
+                        .append('(')
+                        .append(type.group(1))
+                        .append(')');
+                copyFrom = end;
+                i = end;
+                continue;
+            }
+
             if (normalize && c == '?' && bindFollowingKeyword(sql, i + 1)) {
                 if (out == null) out = new StringBuilder(sql.length() + 16);
                 out.append(sql, copyFrom, i + 1).append(' ');
@@ -718,6 +739,31 @@ public final class SqlGate {
                     && source.regionMatches(true, i, target, 0, target.length())) return i;
         }
         return -1;
+    }
+
+    /** Type name that carries CHAR(n CHAR) through the parser, which drops the qualifier. */
+    static final String CHAR_LENGTH_CARRIER = "ORAFIT_CHAR_CS";
+
+    private static final Pattern CHAR_LENGTH_TYPE =
+            Pattern.compile("CHAR\\s*\\(\\s*(\\d+)\\s+CHAR\\s*\\)", Pattern.CASE_INSENSITIVE);
+
+    /** End of a CHAR(n CHAR) token starting at {@code at}, or -1 when there is none. */
+    private static int charLengthType(String sql, int at) {
+        if (at > 0 && identifier(sql.charAt(at - 1))) return -1;
+        Matcher type = CHAR_LENGTH_TYPE.matcher(sql);
+        type.region(at, sql.length());
+        if (!type.lookingAt()) return -1;
+        int end = type.end();
+        return end < sql.length() && identifier(sql.charAt(end)) ? -1 : end;
+    }
+
+    /** True when the nearest word before {@code at} is AS (the CAST target type). */
+    private static boolean precededByAs(String sql, int at) {
+        int i = at - 1;
+        while (i >= 0 && sqlWhitespace(sql.charAt(i))) i--;
+        if (i < 1 || sql.charAt(i) != 'S' && sql.charAt(i) != 's') return false;
+        if (sql.charAt(i - 1) != 'A' && sql.charAt(i - 1) != 'a') return false;
+        return i < 2 || !identifier(sql.charAt(i - 2));
     }
 
     static boolean identifier(char c) {

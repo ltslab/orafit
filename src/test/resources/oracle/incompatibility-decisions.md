@@ -50,6 +50,7 @@ P2はP1の数値・型・日時処理を再利用して対応した。`stddev-si
 | `number-overflow` | P2対応済み | 中 | 大 | 乗算結果と桁数未指定NUMBER CASTを共通ランタイムで正規化し、指数超過をORA-01426にする。加減算・集約を含むNUMBER演算全体の範囲保証ではない。 | `SELECT 1e125 * 1e125 AS value FROM dual` |
 | `to-number-group-separator` | 前回対応済み | 高 | 小 | 既存の数値変換・剰余処理を再利用して修正済み。通常CIのnumber.tomlに回帰ケースがある。 | `SELECT TO_NUMBER('1,234') AS value FROM dual` |
 | `length-fixed-char` | P1対応済み | 中 | 中 | CHARの空白を保持する文字列変換とLENGTHオーバーロードで対応。CASTの既定BYTE長、日本語、NULL、派生表・物理列も検証。 | `SELECT LENGTH(CAST('A' AS CHAR(3))) AS value FROM dual` |
+| `char-length-cast` | P1対応済み | 中 | 小 | `CAST(... AS CHAR(n CHAR))` は文字長で処理する（`orafit.cast_char(..., FALSE)`）。JSqlParser が修飾子を落とすため、AS の直後に限って型名を保持する独自名へ書き換える。AS 以外の `CHAR(n CHAR)` は、バイト扱いにせず拒否する。 | `SELECT CAST('É' AS CHAR(2 CHAR)) AS value FROM dual` |
 | `replace-omitted-replacement` | 前回対応済み | 高 | 小～中 | 既存の文字列変換とPostgreSQL置換処理を再利用できる。NULL・省略引数と証明できるリテラルのメタデータを対応する。 | `SELECT CASE WHEN REPLACE('a', 'a') IS NULL THEN 1 ELSE 0 END AS value FROM dual` |
 | `nullif-type-check` | P1対応済み | 高 | 中 | 既存の型判定でNUMBERと文字型の混在をORA-00932にする。型未指定バインドはFUNCTION_BIND_TYPEで拒否し、明示CASTを要求。 | `SELECT NULLIF(1, '1') AS value FROM dual` |
 | `date-subtraction` | P1対応済み | 高 | 中 | DATE型判定を値の変換とJDBCメタデータで共有し、日単位のNUMBERとscale 0を返す。時刻を含む式と物理DATE列も検証。 | `SELECT DATE '2024-03-02' - DATE '2024-03-01' AS value FROM dual` |

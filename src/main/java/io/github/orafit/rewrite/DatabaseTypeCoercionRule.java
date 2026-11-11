@@ -283,8 +283,8 @@ public final class DatabaseTypeCoercionRule {
                 && lowered.getParameters().size() == 3
                 && lowered.getParameters().get(1) instanceof LongValue length
                 && lowered.getParameters().get(2)
-                        instanceof net.sf.jsqlparser.expression.BooleanValue bytes
-                && bytes.getValue()) return Math.toIntExact(length.getValue());
+                        instanceof net.sf.jsqlparser.expression.BooleanValue)
+            return Math.toIntExact(length.getValue());
         if (value instanceof Function function
                 && function.getName() != null
                 && List.of("MIN", "MAX").contains(function.getName().toUpperCase(Locale.ROOT))
