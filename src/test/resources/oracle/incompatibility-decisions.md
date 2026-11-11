@@ -339,11 +339,14 @@ P2のa4dc0d4から`fix/oracle-p3-validation`を作成。再評価文書と、こ
 - すべての非NULLの枝が同じ幅の`CHAR(n)`なら`CHAR(n)`。書き換えない（PostgreSQLの`bpchar`の集合と値・重複排除が一致する）。
 - 幅が異なる、またはVARCHAR2の枝があれば、VARCHAR2（最大幅）。CHARの枝を`CAST(orafit.char_text(x) AS varchar(n))`にして空白の埋めを保ち、重複排除をOracleの非埋め比較と一致させる。別名のない列には元の列名を別名として付ける。
 - トップレベルの集合では、JDBCメタデータを`CHAR(n)`/`VARCHAR2(n)`として報告する。入れ子の集合では、上の`varchar(n)`により幅が伝わる。
-- 幅を確定できない枝（`NVL`などの関数、バインド、CHAR長セマンティクスの`CAST`、非ASCIIリテラル）がある場合は、従来どおり`SET_CHAR_WIDTH`で拒否する。オフライン翻訳（列メタデータなし）では物理列の型が分からないため、従来どおり拒否する（`offline_code`）。
+- 第1引数が物理CHARの`NVL(a, b)`は、Oracle 18c XEでVARCHAR2になり、幅は2引数の大きい方（`NVL(CHAR(3), ' ')`はVARCHAR2(3)）。CHAR側の空白を保つため、`NVL`の第1引数を`orafit.char_text`で処理する（結果を後から処理すると`orafit.nvl(text, text)`で末尾の空白が消える）。
+- 幅を確定できない枝（バインド、CHAR長セマンティクスの`CAST`、非ASCIIリテラル、幅の決まらないCHAR由来の`NVL`）がある場合は、従来どおり`SET_CHAR_WIDTH`で拒否する。オフライン翻訳（列メタデータなし）では物理列の型が分からないため、従来どおり拒否する（`offline_code`）。オフライン翻訳（列メタデータなし）では物理列の型が分からないため、従来どおり拒否する（`offline_code`）。
 - 派生表・CTE・結合の修飾列・非修飾列は、既存の列型解決と同じ範囲で解決する。曖昧な非修飾列は確定できないものとして拒否する。
 
 `set.char-width-*`の12件（same）をquery/semantics.tomlに追加し、Oracle 18c XEと値・JDBCメタデータが一致することを確認した。
 従来の`p2.reject-unknown-set-char-width`は、物理幅とCASTの組み合わせが確定できるようになったため`set.char-width-physical-cast`（same）へ移し、同じIDは幅を確定できない`NVL`の枝の拒否（runtime）に置き換えた。
+
+NVLの枝は、物理CHAR列の`NVL(code3, 'Z')`を`set.char-width-nvl-physical`（same）へ移した。同じIDは、非ASCIIリテラル`NVL(code3, 'É')`の拒否（runtime）に置き換えた。Oracle 18c XEで値・幅が一致することを確認した。
 
 ### CHAR集合演算の最終検証
 
