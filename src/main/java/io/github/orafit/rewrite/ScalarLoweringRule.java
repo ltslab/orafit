@@ -215,7 +215,7 @@ final class ScalarLoweringRule {
                 String type = cast.getColDataType().getDataType();
                 var charType =
                         java.util.regex.Pattern.compile(
-                                        "(?i)^CHAR\\s*\\(\\s*(\\d+)\\s*(BYTE|CHAR)?\\s*\\)$")
+                                        "(?i)^(?:CHAR|ORAFIT_CHAR_CS)\\s*\\(\\s*(\\d+)\\s*\\)$")
                                 .matcher(cast.getColDataType().toString());
                 if (charType.matches()) {
                     change.changed = true;
@@ -224,7 +224,7 @@ final class ScalarLoweringRule {
                             OracleCoercion.text(cast.getLeftExpression()),
                             new LongValue(charType.group(1)),
                             new net.sf.jsqlparser.expression.BooleanValue(
-                                    !"CHAR".equalsIgnoreCase(charType.group(2))));
+                                    !"ORAFIT_CHAR_CS".equalsIgnoreCase(type)));
                 }
                 if ("DATE".equalsIgnoreCase(type)) {
                     change.changed = true;

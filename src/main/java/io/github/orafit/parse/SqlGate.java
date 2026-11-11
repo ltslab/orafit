@@ -8,6 +8,8 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** One-pass ordinary-SQL lexical normalization and feature gate. */
 public final class SqlGate {
@@ -399,6 +401,24 @@ public final class SqlGate {
                 continue;
             }
 
+            if (normalize && charLengthType(sql, i)) {
+                Matcher type = CHAR_LENGTH_TYPE.matcher(sql).region(i, sql.length());
+                type.lookingAt();
+                if (!AS_BEFORE.matcher(sql.substring(0, i)).find())
+                    throw new TranslationException(
+                            "CHAR_LENGTH_SEMANTICS",
+                            "CHAR(n CHAR) is supported only as CAST(... AS CHAR(n CHAR))");
+                if (out == null) out = new StringBuilder(sql.length() + 16);
+                out.append(sql, copyFrom, i)
+                        .append(CHAR_LENGTH_CARRIER)
+                        .append('(')
+                        .append(type.group(1))
+                        .append(')');
+                copyFrom = type.end();
+                i = copyFrom;
+                continue;
+            }
+
             if (normalize && c == '?' && bindFollowingKeyword(sql, i + 1)) {
                 if (out == null) out = new StringBuilder(sql.length() + 16);
                 out.append(sql, copyFrom, i + 1).append(' ');
@@ -718,6 +738,21 @@ public final class SqlGate {
                     && source.regionMatches(true, i, target, 0, target.length())) return i;
         }
         return -1;
+    }
+
+    /** Type name that carries CHAR(n CHAR) through the parser, which drops the qualifier. */
+    static final String CHAR_LENGTH_CARRIER = "ORAFIT_CHAR_CS";
+
+    private static final Pattern CHAR_LENGTH_TYPE =
+            Pattern.compile("CHAR\\s*\\(\\s*(\\d+)\\s+CHAR\\s*\\)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern AS_BEFORE = Pattern.compile("(?i)\\bAS\\s*$");
+
+    /** True when a CHAR(n CHAR) token starts at {@code at}. */
+    private static boolean charLengthType(String sql, int at) {
+        if (at > 0 && identifier(sql.charAt(at - 1))) return false;
+        Matcher type = CHAR_LENGTH_TYPE.matcher(sql).region(at, sql.length());
+        return type.lookingAt()
+                && (type.end() == sql.length() || !identifier(sql.charAt(type.end())));
     }
 
     static boolean identifier(char c) {
