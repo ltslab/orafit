@@ -791,7 +791,7 @@ title = "CHAR set branch with an unproven width is rejected"
 kind = "query"
 compare = "unordered"
 sql = """
-SELECT NVL(code3, 'Z') AS value FROM bs_char_width
+SELECT NVL(code3, 'É') AS value FROM bs_char_width
 UNION SELECT code2 FROM bs_char_width
 """
 
@@ -803,6 +803,22 @@ mode = "reject"
 stage = "runtime"
 code = "SET_CHAR_WIDTH"
 reason = "CHAR set widths must be proven from physical metadata or explicit casts; no padding approximation"
+
+[[case]]
+id = "set.char-width-nvl-physical"
+title = "NVL of a physical CHAR column is VARCHAR2 of the largest argument width"
+kind = "query"
+compare = "unordered"
+sql = """
+SELECT NVL(code3, 'Z') AS value FROM bs_char_width
+UNION SELECT code2 FROM bs_char_width
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
 
 
 [[case]]

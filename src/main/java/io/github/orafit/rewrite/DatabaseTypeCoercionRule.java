@@ -201,9 +201,12 @@ public final class DatabaseTypeCoercionRule {
                 current = literalWidth(literal);
             } else {
                 ColumnTypeResolver.Kind type = kind(value, scope);
-                if (type == ColumnTypeResolver.Kind.TEXT) {
+                if (type == ColumnTypeResolver.Kind.TEXT
+                        || (type == ColumnTypeResolver.Kind.FIXED_CHAR && nvl(value))) {
                     varchar2 = true;
-                    Integer width = value instanceof Column column ? scope.width(column) : null;
+                    Integer width = textWidth(value, scope);
+                    if (width == null && type == ColumnTypeResolver.Kind.FIXED_CHAR)
+                        throw setCharWidth();
                     if (width == null) unknownWidth = true;
                     else maximum = Math.max(maximum, width);
                     continue;
@@ -218,6 +221,34 @@ public final class DatabaseTypeCoercionRule {
         }
         if (!varchar2) return new CharSetType(true, fixedWidth);
         return new CharSetType(false, unknownWidth ? null : maximum);
+    }
+
+    /** NVL over a character first argument is VARCHAR2 in Oracle (not CHAR). */
+    private static boolean nvl(Expression value) {
+        return value instanceof Function function
+                && function.getName() != null
+                && List.of("NVL", "ORAFIT.NVL")
+                        .contains(function.getName().toUpperCase(Locale.ROOT));
+    }
+
+    /**
+     * Declared width of a VARCHAR2 set branch: a column, or NVL(a, b) whose width is the larger of
+     * its two arguments (Oracle: NVL(CHAR(3), ' ') is VARCHAR2(3)). Unprovable widths are null.
+     */
+    private static Integer textWidth(Expression value, Scope scope) {
+        if (value instanceof Column column) return scope.width(column);
+        if (!nvl(value)) return null;
+        ExpressionList<?> arguments = ((Function) value).getParameters();
+        if (arguments == null || arguments.size() != 2) return null;
+        Integer first = nvlArgument(arguments.get(0), scope);
+        Integer second = nvlArgument(arguments.get(1), scope);
+        return first == null || second == null ? null : Math.max(first, second);
+    }
+
+    private static Integer nvlArgument(Expression argument, Scope scope) {
+        return argument instanceof StringValue literal
+                ? literalWidth(literal)
+                : charWidth(argument, scope);
     }
 
     private static ResolutionFailure setCharWidth() {
@@ -300,10 +331,21 @@ public final class DatabaseTypeCoercionRule {
                 != ColumnTypeResolver.Kind.FIXED_CHAR) return;
         // orafit.char_text keeps CHAR blank padding; the bounded VARCHAR cast reports the
         // Oracle VARCHAR2 width even where the set is nested below another projection.
-        Expression text = new Function("orafit.char_text", item.getExpression());
+        Expression text = charText(item.getExpression());
         if (width != null) text = new CastExpression(text, "varchar(" + width + ")");
         select.getSelectItems().set(index, SelectItem.from(text, outputAlias(item)));
         change.changed = true;
+    }
+
+    /**
+     * Pads CHAR blanks for a VARCHAR2 set branch. NVL over a CHAR argument pads that argument:
+     * orafit.nvl(text, text) would trim the blanks if it received the padded result.
+     */
+    private static Expression charText(Expression value) {
+        if (!nvl(value)) return new Function("orafit.char_text", value);
+        ExpressionList<?> arguments = ((Function) value).getParameters();
+        return new Function(
+                "orafit.nvl", new Function("orafit.char_text", arguments.get(0)), arguments.get(1));
     }
 
     /** Keeps the projected column name when wrapping a bare column reference. */
