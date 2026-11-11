@@ -10,6 +10,12 @@ DROP TABLE IF EXISTS bs_byte_length CASCADE;
 -- @statement
 DROP TABLE IF EXISTS bs_char_width CASCADE;
 -- @statement
+DROP TABLE IF EXISTS bs_set_right CASCADE;
+-- @statement
+DROP TABLE IF EXISTS bs_set_left CASCADE;
+-- @statement
+DROP TABLE IF EXISTS bs_set_main CASCADE;
+-- @statement
 DROP TABLE IF EXISTS bs_model CASCADE;
 -- @statement
 DROP TABLE IF EXISTS bs_wide CASCADE;
@@ -209,6 +215,29 @@ INSERT INTO bs_char_width VALUES (2, 'B', 'B', 'B  ');
 
 -- @statement
 INSERT INTO bs_char_width VALUES (3, NULL, 'C', NULL);
+
+-- @statement
+CREATE TABLE bs_set_main (
+    code char(10) NOT NULL
+);
+-- @statement
+INSERT INTO bs_set_main VALUES ('M001');
+
+-- @statement
+CREATE TABLE bs_set_left (
+    key_id char(10) NOT NULL,
+    code   char(10) NOT NULL
+);
+-- @statement
+INSERT INTO bs_set_left VALUES ('K1', 'L001'), ('K2', 'L002');
+
+-- @statement
+CREATE TABLE bs_set_right (
+    key_id char(10) NOT NULL,
+    code   char(10) NOT NULL
+);
+-- @statement
+INSERT INTO bs_set_right VALUES ('K1', 'R001'), ('K2', 'R002');
 
 -- @statement
 SELECT orafit.apply_byte_length_semantics('public');

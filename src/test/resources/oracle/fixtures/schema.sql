@@ -8,6 +8,12 @@ BEGIN EXECUTE IMMEDIATE 'DROP TABLE bs_byte_length PURGE'; EXCEPTION WHEN OTHERS
 -- @statement
 BEGIN EXECUTE IMMEDIATE 'DROP TABLE bs_char_width PURGE'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
 -- @statement
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE bs_set_right PURGE'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+-- @statement
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE bs_set_left PURGE'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+-- @statement
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE bs_set_main PURGE'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+-- @statement
 BEGIN EXECUTE IMMEDIATE 'DROP TABLE bs_model PURGE'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
 -- @statement
 BEGIN EXECUTE IMMEDIATE 'DROP TABLE bs_wide PURGE'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
@@ -233,6 +239,33 @@ INSERT INTO bs_char_width VALUES (2, 'B', 'B', 'B  ')
 
 -- @statement
 INSERT INTO bs_char_width VALUES (3, NULL, 'C', NULL)
+
+-- @statement
+CREATE TABLE bs_set_main (
+    code CHAR(10) NOT NULL
+)
+-- @statement
+INSERT INTO bs_set_main VALUES ('M001')
+
+-- @statement
+CREATE TABLE bs_set_left (
+    key_id CHAR(10) NOT NULL,
+    code   CHAR(10) NOT NULL
+)
+-- @statement
+INSERT INTO bs_set_left VALUES ('K1', 'L001')
+-- @statement
+INSERT INTO bs_set_left VALUES ('K2', 'L002')
+
+-- @statement
+CREATE TABLE bs_set_right (
+    key_id CHAR(10) NOT NULL,
+    code   CHAR(10) NOT NULL
+)
+-- @statement
+INSERT INTO bs_set_right VALUES ('K1', 'R001')
+-- @statement
+INSERT INTO bs_set_right VALUES ('K2', 'R002')
 
 -- @statement
 CREATE SEQUENCE bs_seq START WITH 100 INCREMENT BY 1 NOCACHE
