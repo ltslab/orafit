@@ -94,7 +94,7 @@ Orafit is published on Maven Central as `io.github.ltslab:orafit-jdbc`. The test
 <dependency>
   <groupId>io.github.ltslab</groupId>
   <artifactId>orafit-jdbc</artifactId>
-  <version>1.0.1</version>
+  <version>1.0.2</version>
 </dependency>
 <dependency>
   <groupId>org.postgresql</groupId>
@@ -104,11 +104,11 @@ Orafit is published on Maven Central as `io.github.ltslab:orafit-jdbc`. The test
 ```
 
 ```kotlin
-implementation("io.github.ltslab:orafit-jdbc:1.0.1")
+implementation("io.github.ltslab:orafit-jdbc:1.0.2")
 implementation("org.postgresql:postgresql:42.7.14")
 ```
 
-The server runtime is published alongside as `io.github.ltslab:orafit-jdbc:1.0.1:runtime@tar.gz`, identical to the GitHub Release asset.
+The server runtime is published alongside as `io.github.ltslab:orafit-jdbc:1.0.2:runtime@tar.gz`, identical to the GitHub Release asset.
 
 ```properties
 driver=io.github.orafit.jdbc.OrafitDriver
