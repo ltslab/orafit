@@ -401,11 +401,10 @@ public final class SqlGate {
                 continue;
             }
 
-            if (normalize && (c == 'C' || c == 'c') && charLengthType(sql, i) >= 0) {
-                int end = charLengthType(sql, i);
-                Matcher type = CHAR_LENGTH_TYPE.matcher(sql);
-                type.region(i, sql.length());
-                if (!type.lookingAt() || !precededByAs(sql, i))
+            if (normalize && charLengthType(sql, i)) {
+                Matcher type = CHAR_LENGTH_TYPE.matcher(sql).region(i, sql.length());
+                type.lookingAt();
+                if (!AS_BEFORE.matcher(sql.substring(0, i)).find())
                     throw new TranslationException(
                             "CHAR_LENGTH_SEMANTICS",
                             "CHAR(n CHAR) is supported only as CAST(... AS CHAR(n CHAR))");
@@ -415,8 +414,8 @@ public final class SqlGate {
                         .append('(')
                         .append(type.group(1))
                         .append(')');
-                copyFrom = end;
-                i = end;
+                copyFrom = type.end();
+                i = copyFrom;
                 continue;
             }
 
@@ -746,24 +745,14 @@ public final class SqlGate {
 
     private static final Pattern CHAR_LENGTH_TYPE =
             Pattern.compile("CHAR\\s*\\(\\s*(\\d+)\\s+CHAR\\s*\\)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern AS_BEFORE = Pattern.compile("(?i)\\bAS\\s*$");
 
-    /** End of a CHAR(n CHAR) token starting at {@code at}, or -1 when there is none. */
-    private static int charLengthType(String sql, int at) {
-        if (at > 0 && identifier(sql.charAt(at - 1))) return -1;
-        Matcher type = CHAR_LENGTH_TYPE.matcher(sql);
-        type.region(at, sql.length());
-        if (!type.lookingAt()) return -1;
-        int end = type.end();
-        return end < sql.length() && identifier(sql.charAt(end)) ? -1 : end;
-    }
-
-    /** True when the nearest word before {@code at} is AS (the CAST target type). */
-    private static boolean precededByAs(String sql, int at) {
-        int i = at - 1;
-        while (i >= 0 && sqlWhitespace(sql.charAt(i))) i--;
-        if (i < 1 || sql.charAt(i) != 'S' && sql.charAt(i) != 's') return false;
-        if (sql.charAt(i - 1) != 'A' && sql.charAt(i - 1) != 'a') return false;
-        return i < 2 || !identifier(sql.charAt(i - 2));
+    /** True when a CHAR(n CHAR) token starts at {@code at}. */
+    private static boolean charLengthType(String sql, int at) {
+        if (at > 0 && identifier(sql.charAt(at - 1))) return false;
+        Matcher type = CHAR_LENGTH_TYPE.matcher(sql).region(at, sql.length());
+        return type.lookingAt()
+                && (type.end() == sql.length() || !identifier(sql.charAt(type.end())));
     }
 
     static boolean identifier(char c) {

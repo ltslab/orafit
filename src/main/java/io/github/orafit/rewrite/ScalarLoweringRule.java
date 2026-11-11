@@ -224,10 +224,7 @@ final class ScalarLoweringRule {
                             OracleCoercion.text(cast.getLeftExpression()),
                             new LongValue(charType.group(1)),
                             new net.sf.jsqlparser.expression.BooleanValue(
-                                    !cast.getColDataType()
-                                            .getDataType()
-                                            .toUpperCase(java.util.Locale.ROOT)
-                                            .equals("ORAFIT_CHAR_CS")));
+                                    !"ORAFIT_CHAR_CS".equalsIgnoreCase(type)));
                 }
                 if ("DATE".equalsIgnoreCase(type)) {
                     change.changed = true;
