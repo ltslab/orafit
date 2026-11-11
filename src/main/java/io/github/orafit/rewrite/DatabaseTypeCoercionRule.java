@@ -875,6 +875,12 @@ public final class DatabaseTypeCoercionRule {
                 new LinkedHashMap<>();
         private final Map<String, Select> derivedSelects = new LinkedHashMap<>();
 
+        /**
+         * Names visible before the FROM clause (inherited scope and this query's WITH items). A
+         * FROM subquery is resolved against this map only, so it never sees its FROM siblings.
+         */
+        private Map<String, Map<String, ColumnTypeResolver.Kind>> outer = Map.of();
+
         private Scope(ColumnTypeResolver resolver) {
             this.resolver = resolver;
         }
@@ -897,6 +903,7 @@ public final class DatabaseTypeCoercionRule {
                                 name, outputKinds(nested.getSelect(), resolver, scope.derived));
                         scope.derivedSelects.put(name, nested.getSelect());
                     }
+            scope.outer = Map.copyOf(scope.derived);
             scope.add(select.getFromItem());
             if (select.getJoins() != null)
                 for (Join join : select.getJoins()) scope.add(join.getFromItem());
@@ -1000,7 +1007,7 @@ public final class DatabaseTypeCoercionRule {
         private void add(FromItem item) {
             if (item instanceof ParenthesedSelect nested && nested.getAlias() != null) {
                 String name = nested.getAlias().getUnquotedName().toLowerCase(Locale.ROOT);
-                derived.put(name, outputKinds(nested.getSelect(), resolver, derived));
+                derived.put(name, outputKinds(nested.getSelect(), resolver, outer));
                 derivedSelects.put(name, nested.getSelect());
                 return;
             }

@@ -988,3 +988,24 @@ outcome = "success"
 
 [case.orafit]
 mode = "same"
+
+[[case]]
+id = "set.char-width-derived-sibling-column"
+title = "A derived table column that shares a name with a sibling FROM derived table keeps its CHAR width"
+kind = "query"
+compare = "unordered"
+sql = """
+SELECT m.code AS out_code
+  FROM bs_set_main m
+UNION
+SELECT r.code AS out_code
+  FROM (SELECT key_id, code FROM bs_set_left GROUP BY key_id, code) l
+  JOIN (SELECT key_id, code FROM bs_set_right GROUP BY key_id, code) r
+    ON r.key_id = l.key_id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
