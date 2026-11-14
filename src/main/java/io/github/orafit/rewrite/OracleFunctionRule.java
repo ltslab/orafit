@@ -1,6 +1,7 @@
 package io.github.orafit.rewrite;
 
 import io.github.orafit.parse.ParserAdapter;
+import io.github.orafit.parse.SqlGate;
 import io.github.orafit.translation.TranslationException;
 
 import net.sf.jsqlparser.expression.BooleanValue;
@@ -50,6 +51,9 @@ final class OracleFunctionRule {
         for (Function function : functions(statement)) {
             if (!OracleCoercion.unqualified(function) || function.getName() == null) continue;
             String name = function.getName().toUpperCase(Locale.ROOT);
+            // The lexical gate is the single list of routed functions: a name it does not send
+            // to the parser must not be lowered only when something else happens to parse.
+            if (!SqlGate.oracleFunction(name)) continue;
             if (name.equals("UPPER")
                     && function.getParameters() != null
                     && function.getParameters().size() == 1

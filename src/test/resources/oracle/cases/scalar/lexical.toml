@@ -15,3 +15,18 @@ outcome = "success"
 
 [case.orafit]
 mode = "same"
+
+[[case]]
+id = "lexical.national-empty-literal-is-null"
+title = "An empty national character literal is NULL"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT CASE WHEN N'' IS NULL THEN 1 ELSE 0 END AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"

@@ -412,6 +412,23 @@ code = "TIMESTAMP_PRECISION"
 reason = "PostgreSQL timestamps have microsecond precision; Orafit rejects Oracle TIMESTAMP literals above six fractional digits instead of silently rounding."
 
 [[case]]
+id = "datetime.reject-timestamp-nine-digits-without-other-oracle-syntax"
+title = "TIMESTAMP literal above six fractional digits in a statement with no other Oracle construct"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TIMESTAMP '2024-02-29 12:34:56.123456789' AS value FROM bs_location
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "reject"
+code = "TIMESTAMP_PRECISION"
+reason = "PostgreSQL timestamps have microsecond precision; the literal is rejected even when nothing else in the statement needs the parser."
+
+[[case]]
 id = "datetime.add-months-fraction"
 title = "ADD_MONTHS truncates fractional month counts"
 kind = "query"

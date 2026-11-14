@@ -5,6 +5,7 @@ import io.github.orafit.translation.TranslationException;
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.ExpressionVisitorAdapter;
+import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
 import net.sf.jsqlparser.parser.ASTNodeAccess;
 import net.sf.jsqlparser.parser.CCJSqlParser;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
@@ -16,8 +17,14 @@ import net.sf.jsqlparser.parser.TokenMgrException;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.create.view.CreateView;
+import net.sf.jsqlparser.statement.delete.Delete;
 import net.sf.jsqlparser.statement.insert.Insert;
+import net.sf.jsqlparser.statement.merge.Merge;
+import net.sf.jsqlparser.statement.merge.MergeInsert;
+import net.sf.jsqlparser.statement.merge.MergeUpdate;
 import net.sf.jsqlparser.statement.select.Values;
+import net.sf.jsqlparser.statement.update.Update;
+import net.sf.jsqlparser.statement.update.UpdateSet;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -127,11 +134,48 @@ public final class ParserAdapter {
         if (statement instanceof ASTNodeAccess access) return nodes(access, type);
         if (statement instanceof CreateView createView && createView.getSelect() != null)
             return nodes((ASTNodeAccess) createView.getSelect(), type);
-        if (statement instanceof Insert insert
-                && insert.getSelect() != null
-                && !(insert.getSelect() instanceof Values))
-            return nodes((ASTNodeAccess) insert.getSelect(), type);
-        return List.of();
+        // DML statements carry no syntax-tree node of their own. Collect from every part that can
+        // hold a subquery, so rules see a query block wherever Oracle allows one.
+        List<Object> roots = new ArrayList<>();
+        if (statement instanceof Insert insert) {
+            if (insert.getSelect() instanceof Values values) roots.add(values.getExpressions());
+            else roots.add(insert.getSelect());
+        } else if (statement instanceof Update update) {
+            if (update.getUpdateSets() != null)
+                for (UpdateSet set : update.getUpdateSets()) roots.add(set.getValues());
+            roots.add(update.getWhere());
+        } else if (statement instanceof Delete delete) {
+            roots.add(delete.getWhere());
+        } else if (statement instanceof Merge merge) {
+            roots.add(merge.getFromItem());
+            roots.add(merge.getOnCondition());
+            MergeUpdate update = merge.getMergeUpdate();
+            if (update != null) {
+                if (update.getUpdateSets() != null)
+                    for (UpdateSet set : update.getUpdateSets()) roots.add(set.getValues());
+                roots.add(update.getWhereCondition());
+                roots.add(update.getDeleteWhereCondition());
+            }
+            MergeInsert insert = merge.getMergeInsert();
+            if (insert != null) {
+                roots.add(insert.getValues());
+                roots.add(insert.getWhereCondition());
+            }
+        }
+        List<T> result = new ArrayList<>();
+        Set<Object> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Object root : roots) collectRoot(root, type, seen, result);
+        return List.copyOf(result);
+    }
+
+    private static <T> void collectRoot(
+            Object root, Class<T> type, Set<Object> seen, List<T> result) {
+        if (root instanceof ExpressionList<?> list) {
+            for (Object element : list) collectRoot(element, type, seen, result);
+            return;
+        }
+        if (!(root instanceof ASTNodeAccess access)) return;
+        for (T node : nodes(access, type)) if (seen.add(node)) result.add(node);
     }
 
     public static <T> List<T> nodes(ASTNodeAccess access, Class<T> type) {

@@ -81,3 +81,75 @@ index = 1
 type = "VARCHAR"
 mode = "in"
 null = true
+
+[[case]]
+id = "common-dml.update-set-subquery-lowering"
+title = "Oracle operators inside an UPDATE SET scalar subquery"
+kind = "update"
+compare = "update"
+sql = """
+UPDATE bs_dml d SET amount = (SELECT s.amount/3 FROM bs_merge_src s WHERE s.id = d.id), note = (SELECT s.note || NULL FROM bs_merge_src s WHERE s.id = d.id) WHERE d.id = 1
+"""
+observe_sql = """
+SELECT id, code, amount, note FROM bs_dml ORDER BY id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "common-dml.delete-where-subquery-lowering"
+title = "Oracle concatenation inside a DELETE WHERE EXISTS subquery"
+kind = "update"
+compare = "update"
+sql = """
+DELETE FROM bs_dml d WHERE EXISTS (SELECT 1 FROM bs_merge_src s WHERE s.id = d.id AND s.note || NULL IS NOT NULL)
+"""
+observe_sql = """
+SELECT id FROM bs_dml ORDER BY id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "common-dml.delete-where-subquery-outer-join"
+title = "Oracle (+) inside a DELETE WHERE IN subquery"
+kind = "update"
+compare = "update"
+sql = """
+DELETE FROM bs_dml WHERE id IN (SELECT s.id FROM bs_merge_src s, bs_dept x WHERE s.id = x.deptno(+))
+"""
+observe_sql = """
+SELECT id FROM bs_dml ORDER BY id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "common-dml.merge-using-subquery-lowering"
+title = "Oracle concatenation inside a MERGE USING subquery"
+kind = "update"
+compare = "update"
+sql = """
+MERGE INTO bs_dml t USING (SELECT id, note || NULL AS note FROM bs_merge_src) s ON (t.id = s.id) WHEN MATCHED THEN UPDATE SET t.note = s.note
+"""
+observe_sql = """
+SELECT id, code, amount, note FROM bs_dml ORDER BY id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"

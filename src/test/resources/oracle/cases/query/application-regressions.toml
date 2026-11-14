@@ -578,3 +578,163 @@ outcome = "success"
 
 [case.orafit]
 mode = "same"
+
+[[case]]
+id = "regression.outer-join-after-ansi-subquery"
+title = "Oracle (+) stays an outer join when an earlier subquery uses ANSI JOIN ... ON"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT e.empno, d.dname
+  FROM bs_emp e, bs_dept d
+ WHERE e.empno IN (SELECT m.empno FROM bs_emp m LEFT JOIN bs_dept x ON x.deptno = m.deptno)
+   AND e.deptno = d.deptno(+)
+ ORDER BY e.empno
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "regression.outer-join-after-join-on-literal"
+title = "Oracle (+) stays an outer join when a literal contains the words JOIN and ON"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT e.empno, d.dname
+  FROM bs_emp e, bs_dept d
+ WHERE e.job <> 'JOIN ON'
+   AND e.deptno = d.deptno(+)
+ ORDER BY e.empno
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "regression.division-in-subquery-in"
+title = "NUMBER division is the same on both sides of IN (subquery)"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno
+  FROM bs_emp
+ WHERE sal/3 IN (SELECT sal/3 FROM bs_emp)
+ ORDER BY empno
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "regression.division-in-list-between-not"
+title = "NUMBER division inside IN list, BETWEEN and NOT"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno
+  FROM bs_emp
+ WHERE empno/2 IN (0.5, 1.5, 3)
+    OR empno/2 BETWEEN 3.4 AND 3.6
+    OR NOT (empno/2 <> 2.5)
+ ORDER BY empno
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "regression.concat-in-list-and-not"
+title = "Concatenation with NULL inside IN list and NOT"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno
+  FROM bs_emp
+ WHERE ename || note IN ('BOB', 'ALICEalpha')
+    OR NOT (ename || note <> 'DAVE')
+ ORDER BY empno
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "regression.division-in-analytic-argument"
+title = "NUMBER division inside an analytic function argument"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno, LAG(sal/3) OVER (ORDER BY empno) AS value
+  FROM bs_emp
+ ORDER BY empno
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "regression.sysdate-in-between"
+title = "SYSDATE day arithmetic inside BETWEEN bounds"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno
+  FROM bs_emp
+ WHERE hired BETWEEN SYSDATE - 100000 AND SYSDATE
+ ORDER BY empno
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "regression.replace-empty-without-other-oracle-syntax"
+title = "REPLACE with an empty replacement in a statement with no other Oracle construct"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno FROM bs_emp WHERE REPLACE(ename, 'A', '') IS NOT NULL ORDER BY empno
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "regression.mod-zero-without-other-oracle-syntax"
+title = "MOD by zero and TRANSLATE in a statement with no other Oracle construct"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno FROM bs_emp WHERE MOD(empno, 0) IS NOT NULL AND TRANSLATE(ename, 'AB', 'x') IS NOT NULL ORDER BY empno
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"

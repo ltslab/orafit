@@ -26,7 +26,32 @@ final class OuterJoinRule {
     boolean rewrite(Statement statement) throws TranslationException {
         boolean changed = false;
         for (PlainSelect select : SelectTrees.plain(statement)) {
+            if (select.getJoins() != null)
+                for (Join join : select.getJoins()) changed |= clearAnsiMarkers(join);
             if (containsPlus(select.getWhere())) changed |= rewriteBlock(select);
+        }
+        return changed;
+    }
+
+    /**
+     * Oracle accepts a redundant {@code (+)} inside an ANSI {@code LEFT JOIN ... ON} condition when
+     * it marks the relation that join already makes optional. Only that proven placement is
+     * removed, and only here on the parsed tree: a marker anywhere else keeps failing closed.
+     */
+    private static boolean clearAnsiMarkers(Join join) throws TranslationException {
+        if (join.getOnExpressions() == null) return false;
+        boolean changed = false;
+        for (Expression on : join.getOnExpressions()) {
+            Scan scan = scan(on);
+            if (scan.plus == 0) continue;
+            if (!join.isLeft() || !scan.marked.equals(Set.of(alias(join.getFromItem())))) {
+                throw unsupported(
+                        "OUTER_JOIN_MIXED",
+                        "Oracle (+) in an ANSI JOIN condition must mark the optional relation of"
+                                + " a LEFT JOIN");
+            }
+            scan.clear(on);
+            changed = true;
         }
         return changed;
     }
@@ -188,6 +213,8 @@ final class OuterJoinRule {
         final Set<String> qualified = new LinkedHashSet<>();
 
         private void inspect(Column column) {
+            boolean marker = column.getOldOracleJoinSyntax() != 0;
+            if (marker) plus++;
             String table = column.getUnquotedTableName();
             if (table == null || table.isBlank()) {
                 unqualified = true;
@@ -195,10 +222,7 @@ final class OuterJoinRule {
             }
             table = table.toLowerCase(Locale.ROOT);
             qualified.add(table);
-            if (column.getOldOracleJoinSyntax() != 0) {
-                plus++;
-                marked.add(table);
-            }
+            if (marker) marked.add(table);
         }
 
         private void inspect(OldOracleJoinBinaryExpression expression) {

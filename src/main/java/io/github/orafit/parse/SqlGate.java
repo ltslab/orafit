@@ -51,8 +51,24 @@ public final class SqlGate {
         "REGEXP_REPLACE",
         "GREATEST",
         "LEAST",
-        "LISTAGG"
+        "LISTAGG",
+        "UPPER",
+        "CEIL",
+        "MOD",
+        "REPLACE",
+        "TRANSLATE"
     };
+    private static final Set<String> ORACLE_FUNCTION_NAMES = Set.of(ORACLE_FUNCTIONS);
+
+    /**
+     * True when the gate sends an unqualified call of {@code name} to the parser. Function lowering
+     * consults this same list, so a function is never routed in one statement and passed through
+     * untouched in another.
+     */
+    public static boolean oracleFunction(String name) {
+        return name != null && ORACLE_FUNCTION_NAMES.contains(name.toUpperCase(Locale.ROOT));
+    }
+
     private static final String[] METADATA_FUNCTIONS = {"COUNT", "SUM", "AVG", "MIN", "MAX"};
     private static final String[] BIND_FOLLOWING_KEYWORDS = {"AND", "OR"};
     private static final Set<String> IGNORABLE_HINTS =
@@ -135,7 +151,8 @@ public final class SqlGate {
                 features,
                 lexical.bindOffsets(),
                 !preprocessed.equals(sql) || lexical.changed(),
-                block.statementCount() > 1);
+                block.statementCount() > 1,
+                lexical.timestampLiteral());
     }
 
     private static boolean requiresStructuralParser(String masked) {
@@ -272,6 +289,7 @@ public final class SqlGate {
         StringBuilder out = null;
         int copyFrom = 0;
         boolean oracleHint = false;
+        boolean timestampLiteral = false;
 
         for (int i = 0; i < sql.length(); ) {
             char c = sql.charAt(i);
@@ -280,9 +298,12 @@ public final class SqlGate {
                 i = quotedEnd(sql, i, c);
                 boolean bareIn = normalize && c == '\'' && bareInBefore(sql, start);
                 boolean empty = normalize && c == '\'' && i == start + 2;
+                if (c == '\'' && timestampKeywordBefore(sql, start)) timestampLiteral = true;
                 if (bareIn || empty) {
                     if (out == null) out = new StringBuilder(sql.length() + 16);
-                    out.append(sql, copyFrom, start);
+                    // N'' is the same Oracle NULL as ''; the national prefix goes with it.
+                    boolean national = empty && copyFrom < start && nationalPrefix(sql, start);
+                    out.append(sql, copyFrom, national ? start - 1 : start);
                     if (bareIn) out.append('(');
                     if (empty) out.append("NULL");
                     else out.append(sql, start, i);
@@ -343,18 +364,6 @@ public final class SqlGate {
                     if (parserSql != null) blank(parserSql, start, i);
                 }
                 blank(masked, start, i);
-                continue;
-            }
-
-            if (normalize
-                    && starts(sql, i, '(', '+')
-                    && i + 2 < sql.length()
-                    && sql.charAt(i + 2) == ')'
-                    && ansiJoinOnBefore(sql, i)) {
-                if (out == null) out = new StringBuilder(sql.length() + 16);
-                out.append(sql, copyFrom, i);
-                copyFrom = i + 3;
-                i += 3;
                 continue;
             }
 
@@ -447,6 +456,7 @@ public final class SqlGate {
                     rescanned.parserSql(),
                     rescanned.bindOffsets(),
                     rescanned.oracleHint(),
+                    rescanned.timestampLiteral(),
                     true);
         }
         return new Lexical(
@@ -455,7 +465,22 @@ public final class SqlGate {
                 parserSql == null ? null : new String(parserSql),
                 collectBinds ? List.copyOf(binds) : List.of(),
                 oracleHint,
+                timestampLiteral,
                 false);
+    }
+
+    private static boolean nationalPrefix(String sql, int quote) {
+        if (quote < 1) return false;
+        char prefix = sql.charAt(quote - 1);
+        return (prefix == 'N' || prefix == 'n')
+                && (quote == 1 || !identifier(sql.charAt(quote - 2)));
+    }
+
+    /** True for the literal of {@code TIMESTAMP '...'}, whose precision the parser must check. */
+    private static boolean timestampKeywordBefore(String sql, int quote) {
+        int end = quote;
+        while (end > 0 && sqlWhitespace(sql.charAt(end - 1))) end--;
+        return wordAt(sql, "TIMESTAMP", end - "TIMESTAMP".length());
     }
 
     private static boolean bindFollowingKeyword(String sql, int start) {
@@ -509,22 +534,6 @@ public final class SqlGate {
     private static int findQEnd(String sql, int from, char close) {
         for (int i = from; i + 1 < sql.length(); i++)
             if (sql.charAt(i) == close && sql.charAt(i + 1) == '\'') return i;
-        return -1;
-    }
-
-    private static boolean ansiJoinOnBefore(String sql, int at) {
-        int on = lastWordBefore(sql, "ON", at);
-        int join = lastWordBefore(sql, "JOIN", at);
-        if (on < 0 || join < 0 || on < join) return false;
-        for (String boundary : new String[] {"WHERE", "GROUP", "HAVING", "ORDER"}) {
-            if (lastWordBefore(sql, boundary, at) > on) return false;
-        }
-        return true;
-    }
-
-    private static int lastWordBefore(String sql, String word, int limit) {
-        int start = Math.min(limit - 1, sql.length() - word.length());
-        for (int i = start; i >= 0; i--) if (wordAt(sql, word, i)) return i;
         return -1;
     }
 
@@ -765,7 +774,8 @@ public final class SqlGate {
             Set<Feature> features,
             List<Integer> bindOffsets,
             boolean changed,
-            boolean script) {
+            boolean script,
+            boolean timestampLiteral) {
         public Scan {
             features = Set.copyOf(features);
             bindOffsets = List.copyOf(bindOffsets);
@@ -776,7 +786,7 @@ public final class SqlGate {
         }
 
         public boolean requiresStructuralParser() {
-            return SqlGate.requiresStructuralParser(masked);
+            return timestampLiteral || SqlGate.requiresStructuralParser(masked);
         }
 
         public boolean requiresDatabaseCoercion() {
@@ -794,6 +804,7 @@ public final class SqlGate {
             String parserSql,
             List<Integer> bindOffsets,
             boolean oracleHint,
+            boolean timestampLiteral,
             boolean changed) {}
 
     private record DmlBlock(String sql, int statementCount) {}
