@@ -3,15 +3,18 @@ package io.github.orafit.rewrite;
 import io.github.orafit.translation.ColumnTypeResolver;
 import io.github.orafit.translation.TranslationException;
 
+import net.sf.jsqlparser.expression.AnalyticExpression;
 import net.sf.jsqlparser.expression.BinaryExpression;
 import net.sf.jsqlparser.expression.CaseExpression;
 import net.sf.jsqlparser.expression.CastExpression;
 import net.sf.jsqlparser.expression.DateTimeLiteralExpression;
 import net.sf.jsqlparser.expression.DoubleValue;
 import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.ExpressionVisitorAdapter;
 import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.expression.JdbcNamedParameter;
 import net.sf.jsqlparser.expression.LongValue;
+import net.sf.jsqlparser.expression.NotExpression;
 import net.sf.jsqlparser.expression.NullValue;
 import net.sf.jsqlparser.expression.OracleNamedFunctionParameter;
 import net.sf.jsqlparser.expression.SignedExpression;
@@ -23,10 +26,13 @@ import net.sf.jsqlparser.expression.operators.arithmetic.Concat;
 import net.sf.jsqlparser.expression.operators.arithmetic.Division;
 import net.sf.jsqlparser.expression.operators.arithmetic.Multiplication;
 import net.sf.jsqlparser.expression.operators.arithmetic.Subtraction;
+import net.sf.jsqlparser.expression.operators.relational.Between;
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
 import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
 import net.sf.jsqlparser.expression.operators.relational.GreaterThan;
 import net.sf.jsqlparser.expression.operators.relational.GreaterThanEquals;
+import net.sf.jsqlparser.expression.operators.relational.InExpression;
+import net.sf.jsqlparser.expression.operators.relational.IsBooleanExpression;
 import net.sf.jsqlparser.expression.operators.relational.IsNullExpression;
 import net.sf.jsqlparser.expression.operators.relational.LikeExpression;
 import net.sf.jsqlparser.expression.operators.relational.MinorThan;
@@ -38,8 +44,10 @@ import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.delete.Delete;
 import net.sf.jsqlparser.statement.execute.Execute;
 import net.sf.jsqlparser.statement.insert.Insert;
+import net.sf.jsqlparser.statement.select.OrderByElement;
 import net.sf.jsqlparser.statement.select.ParenthesedSelect;
 import net.sf.jsqlparser.statement.select.PlainSelect;
+import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.statement.select.SelectItem;
 import net.sf.jsqlparser.statement.select.SetOperationList;
 import net.sf.jsqlparser.statement.select.Values;
@@ -373,8 +381,143 @@ final class ScalarLoweringRule {
                                 binary.getRightExpression(), OracleCoercion.Kind.NUMBER));
                 return new Function("orafit.number_value", binary);
             }
+            return binary;
+        }
+        if (expression instanceof InExpression in) {
+            in.setLeftExpression(lower(in.getLeftExpression(), change));
+            in.setRightExpression(lower(in.getRightExpression(), change));
+            return in;
+        }
+        if (expression instanceof Between between) {
+            between.setLeftExpression(lower(between.getLeftExpression(), change));
+            between.setBetweenExpressionStart(lower(between.getBetweenExpressionStart(), change));
+            between.setBetweenExpressionEnd(lower(between.getBetweenExpressionEnd(), change));
+            return between;
+        }
+        if (expression instanceof NotExpression not) {
+            not.setExpression(lower(not.getExpression(), change));
+            return not;
+        }
+        if (expression instanceof IsBooleanExpression test) {
+            test.setLeftExpression(lower(test.getLeftExpression(), change));
+            return test;
+        }
+        if (expression instanceof AnalyticExpression analytic) {
+            lowerAnalytic(analytic, change);
+            return analytic;
+        }
+        // Every node this rule lowers has been handled above. Anything else is returned as it
+        // was parsed, so it must not hide an operator whose PostgreSQL meaning differs from
+        // Oracle's: failing here is safer than emitting native division or concatenation.
+        if (UnloweredScan.found(expression)) {
+            throw new TranslationException(
+                    "SCALAR_CONTEXT",
+                    "Oracle scalar operator inside "
+                            + expression.getClass().getSimpleName()
+                            + " is outside the supported lowering contexts");
         }
         return expression;
+    }
+
+    private static void lowerAnalytic(AnalyticExpression analytic, Change change)
+            throws TranslationException {
+        analytic.setExpression(lower(analytic.getExpression(), change));
+        analytic.setOffset(lower(analytic.getOffset(), change));
+        analytic.setDefaultValue(lower(analytic.getDefaultValue(), change));
+        analytic.setFilterExpression(lower(analytic.getFilterExpression(), change));
+        if (analytic.getPartitionExpressionList() != null)
+            lowerList(analytic.getPartitionExpressionList(), change);
+        lowerOrder(analytic.getOrderByElements(), change);
+        lowerOrder(analytic.getFuncOrderBy(), change);
+        if (analytic.getKeep() != null) lowerOrder(analytic.getKeep().getOrderByElements(), change);
+    }
+
+    private static void lowerOrder(List<OrderByElement> order, Change change)
+            throws TranslationException {
+        if (order == null) return;
+        for (OrderByElement element : order)
+            element.setExpression(lower(element.getExpression(), change));
+    }
+
+    /**
+     * Detects operators and functions this rule would have lowered, below a node it does not
+     * descend into. Subqueries are skipped: their blocks are lowered on their own.
+     */
+    private static final class UnloweredScan extends ExpressionVisitorAdapter<Void> {
+        private boolean found;
+
+        static boolean found(Expression expression) {
+            UnloweredScan scan = new UnloweredScan();
+            expression.accept(scan, null);
+            return scan.found;
+        }
+
+        @Override
+        public <S> Void visit(Select select, S context) {
+            return null;
+        }
+
+        @Override
+        public <S> Void visit(ParenthesedSelect select, S context) {
+            return null;
+        }
+
+        @Override
+        public <S> Void visit(Division value, S context) {
+            found = true;
+            return null;
+        }
+
+        @Override
+        public <S> Void visit(Multiplication value, S context) {
+            found = true;
+            return null;
+        }
+
+        @Override
+        public <S> Void visit(Concat value, S context) {
+            found = true;
+            return null;
+        }
+
+        @Override
+        public <S> Void visit(LikeExpression value, S context) {
+            found = true;
+            return null;
+        }
+
+        @Override
+        public <S> Void visit(TrimFunction value, S context) {
+            found = true;
+            return null;
+        }
+
+        @Override
+        public <S> Void visit(StringValue value, S context) {
+            found |= value.getValue().isEmpty();
+            return null;
+        }
+
+        @Override
+        public <S> Void visit(Column column, S context) {
+            found |= isSysdate(column) || isSystimestamp(column) || sequenceOperation(column);
+            return null;
+        }
+
+        @Override
+        public <S> Void visit(Function function, S context) {
+            found |=
+                    OracleCoercion.unqualified(function, "DECODE")
+                            || OracleCoercion.unqualified(function, "LTRIM")
+                            || OracleCoercion.unqualified(function, "RTRIM");
+            return super.visit(function, context);
+        }
+    }
+
+    private static boolean sequenceOperation(Column column) {
+        String operation = column.getUnquotedColumnName();
+        return column.getTable() != null
+                && ("NEXTVAL".equalsIgnoreCase(operation) || "CURRVAL".equalsIgnoreCase(operation));
     }
 
     @SuppressWarnings("unchecked")

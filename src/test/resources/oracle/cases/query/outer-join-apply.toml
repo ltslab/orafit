@@ -90,3 +90,26 @@ outcome = "success"
 
 [case.orafit]
 mode = "same"
+
+[[case]]
+id = "outer-join.reject-marker-on-ansi-mandatory-side"
+title = "Oracle (+) in an ANSI ON condition that marks the mandatory relation"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT d.deptno, e.empno
+  FROM bs_dept d
+  LEFT OUTER JOIN bs_emp e
+    ON e.deptno = d.deptno(+)
+ ORDER BY d.deptno, e.empno
+"""
+
+[case.oracle]
+outcome = "error"
+error_code = 1468
+
+[case.orafit]
+mode = "reject"
+stage = "translation"
+code = "OUTER_JOIN_MIXED"
+reason = "Only a redundant marker on the LEFT JOIN optional relation is proven; other placements are never dropped silently"

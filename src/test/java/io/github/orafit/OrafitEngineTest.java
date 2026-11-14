@@ -353,6 +353,136 @@ public final class OrafitEngineTest {
     }
 
     @Test
+    void outerJoinMarkerIsNeverDroppedLexically() throws Exception {
+        OrafitEngine engine = new OrafitEngine();
+        for (String sql :
+                List.of(
+                        "SELECT * FROM a, b WHERE a.id IN (SELECT x.id FROM x JOIN y ON x.k = y.k)"
+                                + " AND a.id = b.id(+)",
+                        "SELECT * FROM a, b WHERE a.note = 'JOIN ON' AND a.id = b.id(+)")) {
+            String translated = engine.translate(sql).sql().toUpperCase();
+            check(translated.contains("LEFT JOIN B"), "Oracle (+) must become LEFT JOIN: " + sql);
+            check(!translated.contains("(+)"), "rewritten outer join must not retain (+)");
+        }
+        String redundant = engine.translate("SELECT * FROM a LEFT JOIN b ON a.id = b.id(+)").sql();
+        check(!redundant.contains("(+)"), "redundant ANSI marker must be removed");
+        check(redundant.toUpperCase().contains("LEFT JOIN B"), "ANSI LEFT JOIN must be kept");
+        unsupported(engine, "SELECT * FROM a LEFT JOIN b ON a.id(+) = b.id", "OUTER_JOIN_MIXED");
+        unsupported(engine, "SELECT * FROM a JOIN b ON a.id = b.id(+)", "OUTER_JOIN_MIXED");
+        unsupported(engine, "SELECT * FROM a LEFT JOIN b ON a.id = id(+)", "OUTER_JOIN_MIXED");
+        unsupported(engine, "SELECT * FROM a, b WHERE a.id = id(+)", "OUTER_JOIN_OPTIONAL_SIDE");
+    }
+
+    @Test
+    void scalarOperatorsAreLoweredInsideEveryPredicateShape() throws Exception {
+        OrafitEngine engine = new OrafitEngine();
+        for (String sql :
+                List.of(
+                        "SELECT n FROM t WHERE n/2 IN (1, 2)",
+                        "SELECT n FROM t WHERE n/2 NOT IN (SELECT m/2 FROM u)",
+                        "SELECT n FROM t WHERE n/2 BETWEEN 1 AND 2",
+                        "SELECT n FROM t WHERE m BETWEEN n/2 AND n/3",
+                        "SELECT n FROM t WHERE NOT (n/2 = 1)",
+                        "SELECT n FROM t WHERE (n/2, m) IN ((1, 2))",
+                        "SELECT SUM(n/2) OVER (PARTITION BY m) FROM t",
+                        "SELECT SUM(n) OVER (PARTITION BY n/2 ORDER BY m/2) FROM t",
+                        "SELECT CASE WHEN n/2 IN (1) THEN 1 ELSE 0 END FROM t",
+                        "UPDATE t SET m = 1 WHERE n/2 IN (1, 2)",
+                        "DELETE FROM t WHERE n/2 BETWEEN 1 AND 2")) {
+            String translated = engine.translate(sql).sql();
+            check(!translated.contains("/"), "native division must not survive: " + translated);
+            check(translated.contains("orafit.divide("), "division must be lowered: " + sql);
+        }
+        for (String sql :
+                List.of(
+                        "SELECT n FROM t WHERE a || b IN ('x', 'y')",
+                        "SELECT n FROM t WHERE c BETWEEN a || b AND 'z'",
+                        "SELECT n FROM t WHERE NOT (a || b = 'x')")) {
+            String translated = engine.translate(sql).sql();
+            check(!translated.contains("||"), "native concat must not survive: " + translated);
+        }
+        check(
+                engine.translate("SELECT n FROM t WHERE d BETWEEN SYSDATE - 7 AND SYSDATE")
+                        .sql()
+                        .contains("BETWEEN orafit.sysdate() - orafit.days_interval(7)"),
+                "SYSDATE inside BETWEEN bounds must be lowered");
+        unsupported(engine, "SELECT n FROM t WHERE (a || b) COLLATE \"C\" = 'x'", "SCALAR_CONTEXT");
+    }
+
+    @Test
+    void dmlSubqueriesAreLoweredLikeQueryBlocks() throws Exception {
+        OrafitEngine engine = new OrafitEngine();
+        for (String sql :
+                List.of(
+                        "UPDATE t SET n = (SELECT MAX(m/2) FROM u WHERE u.a || 'x' = t.a)",
+                        "UPDATE t SET (n, m) = (SELECT n/2, a || b FROM u WHERE u.id = t.id)",
+                        "DELETE FROM t WHERE EXISTS (SELECT 1 FROM u WHERE u.n/2 = t.n"
+                                + " AND u.a || u.b = t.a)",
+                        "MERGE INTO t USING (SELECT id, n/2 AS h, a || b AS c FROM u) s"
+                                + " ON (t.id = s.id) WHEN MATCHED THEN UPDATE SET t.n = s.h",
+                        "INSERT INTO t (n, a) VALUES ((SELECT MAX(n/2) FROM u),"
+                                + " (SELECT a || b FROM u))")) {
+            String translated = engine.translate(sql).sql();
+            check(!translated.contains("/"), "native division must not survive: " + translated);
+            check(!translated.contains("||"), "native concat must not survive: " + translated);
+        }
+        String outer =
+                engine.translate(
+                                "DELETE FROM t WHERE id IN (SELECT a.id FROM u a, w b"
+                                        + " WHERE a.id = b.k(+) AND ROWNUM <= 5)")
+                        .sql()
+                        .toUpperCase();
+        check(outer.contains("LEFT JOIN W B"), "(+) in a DML subquery must become LEFT JOIN");
+        check(outer.contains("FETCH FIRST 5 ROWS ONLY"), "ROWNUM in a DML subquery is lowered");
+        check(
+                engine.translate("UPDATE t SET a = (SELECT dummy FROM dual)")
+                        .sql()
+                        .contains("orafit.dual"),
+                "DUAL in an UPDATE SET subquery must be routed");
+    }
+
+    @Test
+    void lexicalEdgesReachTheSameContractAsTheirPlainForms() throws Exception {
+        OrafitEngine engine = new OrafitEngine();
+        equal(
+                "SELECT NULL, NULL FROM t",
+                engine.translate("SELECT N'', n'' FROM t").sql(),
+                "empty national literal is NULL");
+        unsupported(
+                engine,
+                "SELECT TIMESTAMP '2024-01-01 00:00:00.1234567' FROM t",
+                "TIMESTAMP_PRECISION");
+        equal(
+                "CREATE TABLE x (c TIMESTAMP)",
+                engine.translate("CREATE TABLE x (c TIMESTAMP)").sql(),
+                "TIMESTAMP as a type name must not force the parser");
+    }
+
+    @Test
+    void routedFunctionsDoNotDependOnOtherStatementContent() throws Exception {
+        OrafitEngine engine = new OrafitEngine();
+        check(
+                engine.translate("SELECT REPLACE(s, 'a', '') FROM t")
+                        .sql()
+                        .startsWith("SELECT orafit.replace("),
+                "REPLACE alone must reach the parser");
+        check(
+                engine.translate("SELECT MOD(n, 0) FROM t").sql().contains("orafit.mod("),
+                "MOD alone must reach the parser");
+        check(
+                engine.translate("SELECT CEIL(n) FROM t").sql().contains("orafit.ceil("),
+                "CEIL alone must reach the parser");
+        check(
+                engine.translate("SELECT TRANSLATE(s, 'ab', 'c') FROM t")
+                        .sql()
+                        .contains("orafit.translate("),
+                "TRANSLATE alone must reach the parser");
+        check(
+                engine.translate("SELECT UPPER(123) FROM t").sql().contains("orafit.to_varchar2("),
+                "UPPER of a number alone must reach the parser");
+    }
+
+    @Test
     void dmlAndReturning() throws Exception {
         Translation merge =
                 engine.translate(
