@@ -68,19 +68,6 @@ final class OracleRuntimeSemanticsPostgresTest {
     }
 
     @Test
-    void paddingOfFullWidthCharactersFailsClosed() throws Exception {
-        try (Connection connection = IntegrationSupport.open();
-                Statement statement = connection.createStatement()) {
-            SQLException error =
-                    assertThrows(
-                            SQLException.class,
-                            () -> statement.executeQuery("SELECT LPAD('あ', 5, '*') FROM dual"));
-            assertEquals("0A000", error.getSQLState());
-            assertEquals("***ab", scalar(connection, "SELECT LPAD('ab', 5, '*') FROM dual"));
-        }
-    }
-
-    @Test
     void fractionalSecondFormatKeepsTheRequestedDigits() throws Exception {
         try (Connection connection = IntegrationSupport.open()) {
             assertEquals(

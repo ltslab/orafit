@@ -94,3 +94,31 @@ error_code = 1722
 
 [case.orafit]
 mode = "same"
+
+[[case]]
+id = "padding.display-width"
+title = "LPAD and RPAD count display columns"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT CASE WHEN LPAD('あ', 5, '*') = '***あ'
+             AND LPAD('あいう', 5, '*') = ' あい'
+             AND LPAD('あいう', 2, '*') = 'あ'
+             AND RPAD('あいう', 5, '*') = 'あい '
+             AND RPAD('a', 6, 'あ') = 'aああ '
+             AND LPAD('a', 6, 'あ') = ' ああa'
+             AND LPAD('a', 4, 'あい') = ' あa'
+             AND LPAD('Ａ', 4, '*') = '**Ａ'
+             AND LPAD('ｱ', 4, '*') = '***ｱ'
+             AND LPAD('㈱', 4, '*') = '**㈱'
+             AND LPAD('🙂', 4, '*') = '**🙂'
+             AND LPAD('é', 4, '*') = '***é'
+             AND LPAD('★', 4, '*') = '***★'
+        THEN 1 ELSE 0 END AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"

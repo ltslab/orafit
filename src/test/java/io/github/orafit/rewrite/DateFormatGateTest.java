@@ -19,15 +19,12 @@ final class DateFormatGateTest {
     @ParameterizedTest
     @ValueSource(
             strings = {
-                "SELECT TO_DATE('99-01-01', 'YY-MM-DD') FROM dual",
-                "SELECT TO_DATE('2024', 'YYYY') FROM dual",
-                "SELECT TO_DATE('12:30', 'HH24:MI') FROM dual",
-                "SELECT TO_DATE('01-15', 'MM-DD') FROM dual",
                 "SELECT TO_TIMESTAMP('2024-01-01 00:00:00.123456789', 'YYYY-MM-DD HH24:MI:SS.FF9') FROM dual",
                 "SELECT TO_TIMESTAMP('2024-01-01 00:00:00.1', 'YYYY-MM-DD HH24:MI:SS.FF') FROM dual",
-                "SELECT TO_TIMESTAMP('2024-01-01 00:00:00.1', 'YYYY-MM-DD HH24:MI:SS.FF1') FROM dual"
+                "SELECT TO_TIMESTAMP('2024-01-01 00:00:00.1', 'YYYY-MM-DD HH24:MI:SS.FFF') FROM dual",
+                "SELECT TO_CHAR(hiredate, 'HH24:MI:SS.FF') FROM emp"
             })
-    void rejectsFormatsWithOracleSpecificDefaults(String sql) {
+    void rejectsFractionFormatsWhoseDigitsDependOnTheType(String sql) {
         TranslationException failure =
                 assertThrows(TranslationException.class, () -> engine.translate(sql));
 
@@ -38,11 +35,18 @@ final class DateFormatGateTest {
     @ValueSource(
             strings = {
                 "SELECT TO_DATE('2024-01', 'YYYY-MM') FROM dual",
+                "SELECT TO_CHAR(hiredate, 'HH24:MI:SS.FF9') FROM emp",
                 "SELECT TO_DATE('20240115', 'YYYYMMDD') FROM dual",
+                "SELECT TO_DATE('99-01-01', 'YY-MM-DD') FROM dual",
+                "SELECT TO_DATE('2024', 'YYYY') FROM dual",
+                "SELECT TO_DATE('12:30', 'HH24:MI') FROM dual",
+                "SELECT TO_DATE('01-15', 'MM-DD') FROM dual",
+                "SELECT TO_TIMESTAMP('2024-01-01 00:00:00.1', 'YYYY-MM-DD HH24:MI:SS.FF1') FROM dual",
+                "SELECT TO_TIMESTAMP('2024-01-01 00:00:00.12345', 'YYYY-MM-DD HH24:MI:SS.FF5') FROM dual",
                 "SELECT TO_TIMESTAMP('2024-01-01 00:00:00.123', 'YYYY-MM-DD HH24:MI:SS.FF3') FROM dual",
                 "SELECT TO_TIMESTAMP('2024-01-01 00:00:00.123456', 'YYYY-MM-DD HH24:MI:SS.FF6') FROM dual"
             })
-    void keepsFormatsThatNameYearAndMonthAndSupportedFractions(String sql) {
+    void keepsPartialFormatsTwoDigitYearsAndExplicitFractions(String sql) {
         assertDoesNotThrow(() -> engine.translate(sql));
     }
 

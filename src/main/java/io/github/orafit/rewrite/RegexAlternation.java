@@ -11,8 +11,9 @@ import java.util.Locale;
  *
  * <p>Oracle tries alternatives left to right and keeps the first that lets the whole pattern match;
  * PostgreSQL keeps the longest match. The two agree only when no two alternatives can match at the
- * same position, which this class proves for the one shape it understands: alternatives made only
- * of literal characters, none a prefix of another. Any other alternation is reported as ambiguous.
+ * same position, or when the longest alternative is listed first and ends the pattern. This class
+ * proves those for the one shape it understands: alternatives made only of literal characters. Any
+ * other alternation is reported as ambiguous.
  */
 final class RegexAlternation {
     private static final String LITERAL_PUNCTUATION = " _-,:;@=!%&/<>'\"";
@@ -35,7 +36,8 @@ final class RegexAlternation {
                 level = new Level();
             } else if (c == ')' && !stack.isEmpty()) {
                 boolean alternation = level.alternatives.size() > 1;
-                if (alternation && !level.safe()) return true;
+                boolean tail = i + 1 >= pattern.length() || pattern.charAt(i + 1) == '$';
+                if (alternation && !level.safe(tail)) return true;
                 level = stack.pop();
                 level.opaque();
                 if (alternation) level.nestedAlternation = true;
@@ -50,10 +52,10 @@ final class RegexAlternation {
         }
         // An unbalanced pattern is PostgreSQL's to reject; treat any open group like the top level.
         while (!stack.isEmpty()) {
-            if (level.alternatives.size() > 1 && !level.safe()) return true;
+            if (level.alternatives.size() > 1 && !level.safe(false)) return true;
             level = stack.pop();
         }
-        return level.alternatives.size() > 1 && !level.safe();
+        return level.alternatives.size() > 1 && !level.safe(true);
     }
 
     private static int endOfBracket(String pattern, int open) {
@@ -94,7 +96,11 @@ final class RegexAlternation {
             if (!currentLiteral) plain.set(alternatives.size() - 1, Boolean.FALSE);
         }
 
-        boolean safe() {
+        /**
+         * @param tail whether nothing but an end anchor follows this alternation, so that the first
+         *     alternative that matches is also the longest overall match
+         */
+        boolean safe(boolean tail) {
             sync();
             if (nestedAlternation) return false;
             List<String> literals = new ArrayList<>();
@@ -105,7 +111,12 @@ final class RegexAlternation {
             }
             for (int i = 0; i < literals.size(); i++) {
                 for (int j = 0; j < literals.size(); j++) {
-                    if (i != j && literals.get(j).startsWith(literals.get(i))) return false;
+                    if (i == j || !literals.get(j).startsWith(literals.get(i))) continue;
+                    if (literals.get(i).equals(literals.get(j))) continue;
+                    // Branch i is a prefix of branch j. Oracle takes the first branch that matches
+                    // and PostgreSQL the longest, which coincide only when the longer branch comes
+                    // first and nothing after the alternation can change which match is longest.
+                    if (!tail || j > i) return false;
                 }
             }
             return true;

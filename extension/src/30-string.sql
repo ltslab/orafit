@@ -7,6 +7,12 @@ AS $$
 DECLARE
     result text;
     decimal_character text;
+    magnitude numeric;
+    rounded numeric;
+    sign_length integer;
+    int_digits integer;
+    exponent integer;
+    digits integer;
 BEGIN
     IF value IS NULL THEN RETURN NULL; END IF;
     IF nls_numeric_characters IS NULL
@@ -20,11 +26,36 @@ BEGIN
     -- conversion therefore omits insignificant fractional zeros, unlike PostgreSQL numeric.
     result := pg_catalog.trim_scale(value)::text;
     result := regexp_replace(result, '^(-?)0[.]', '\1.');
-    -- Beyond forty characters Oracle prints scientific notation (or rounds to fit); neither has a
-    -- PostgreSQL equivalent, so do not print plain digits that Oracle would not.
     IF length(result) > 40 THEN
-        RAISE EXCEPTION 'Orafit: TO_CHAR of a NUMBER needing more than 40 characters has no PostgreSQL equivalent'
-            USING ERRCODE = '0A000';
+        -- Oracle prints at most forty characters. A value of 1E-5 or more that still fits is
+        -- rounded to forty characters; everything else switches to scientific notation.
+        magnitude := abs(value);
+        sign_length := CASE WHEN value < 0 THEN 1 ELSE 0 END;
+        int_digits := CASE WHEN magnitude < 1 THEN 0 ELSE length(trunc(magnitude)::text) END;
+        IF magnitude >= 0.00001 AND int_digits + sign_length <= 40 THEN
+            result := pg_catalog.trim_scale(
+                round(value, greatest(40 - sign_length - int_digits - 1, 0)))::text;
+            result := regexp_replace(result, '^(-?)0[.]', '\1.');
+            IF length(result) > 40 THEN
+                RAISE EXCEPTION 'Orafit: TO_CHAR of this NUMBER has no PostgreSQL equivalent'
+                    USING ERRCODE = '0A000';
+            END IF;
+        ELSE
+            exponent := floor(log(10::numeric, magnitude))::integer;
+            WHILE magnitude < ('1e' || exponent)::numeric LOOP exponent := exponent - 1; END LOOP;
+            WHILE magnitude >= ('1e' || (exponent + 1))::numeric LOOP exponent := exponent + 1; END LOOP;
+            digits := 34 - sign_length;
+            rounded := round(magnitude, digits - exponent);
+            IF rounded >= ('1e' || (exponent + 1))::numeric THEN exponent := exponent + 1; END IF;
+            IF abs(exponent) >= 100 THEN
+                RAISE EXCEPTION 'Orafit: TO_CHAR of this NUMBER has no PostgreSQL equivalent'
+                    USING ERRCODE = '0A000';
+            END IF;
+            result := CASE WHEN value < 0 THEN '-' ELSE '' END
+                || round(rounded * ('1e' || (-exponent))::numeric, digits)::text
+                || 'E' || CASE WHEN exponent < 0 THEN '-' ELSE '+' END
+                || lpad(abs(exponent)::text, 2, '0');
+        END IF;
     END IF;
     IF decimal_character <> '.' THEN result := replace(result, '.', decimal_character); END IF;
     RETURN result;
@@ -253,6 +284,48 @@ RETURNS numeric LANGUAGE sql IMMUTABLE PARALLEL SAFE
 AS $$ SELECT COALESCE($1, $2::numeric) $$;
 
 -- LPAD and RPAD share Oracle length, empty-string, and range handling.
+-- Oracle counts display columns for LPAD/RPAD: East Asian Wide and Fullwidth characters take two,
+-- everything else (including combining marks and zero-width characters) takes one. A column that a
+-- wide character cannot fill is padded with a space.
+CREATE FUNCTION orafit._wide_class()
+RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE
+AS $$
+SELECT '[' || chr(x'1100'::int) || '-' || chr(x'115F'::int)
+    || chr(x'2E80'::int) || '-' || chr(x'303E'::int)
+    || chr(x'3041'::int) || '-' || chr(x'33FF'::int)
+    || chr(x'3400'::int) || '-' || chr(x'4DBF'::int)
+    || chr(x'4E00'::int) || '-' || chr(x'9FFF'::int)
+    || chr(x'A000'::int) || '-' || chr(x'A4CF'::int)
+    || chr(x'A960'::int) || '-' || chr(x'A97F'::int)
+    || chr(x'AC00'::int) || '-' || chr(x'D7A3'::int)
+    || chr(x'F900'::int) || '-' || chr(x'FAFF'::int)
+    || chr(x'FE10'::int) || '-' || chr(x'FE19'::int)
+    || chr(x'FE30'::int) || '-' || chr(x'FE6F'::int)
+    || chr(x'FF00'::int) || '-' || chr(x'FF60'::int)
+    || chr(x'FFE0'::int) || '-' || chr(x'FFE6'::int)
+    || chr(x'1F300'::int) || '-' || chr(x'1F64F'::int)
+    || chr(x'1F900'::int) || '-' || chr(x'1F9FF'::int)
+    || chr(x'20000'::int) || '-' || chr(x'3FFFD'::int) || ']'
+$$;
+
+-- Symbol blocks whose width Oracle was not compared against; refuse rather than guess.
+CREATE FUNCTION orafit._unverified_width_class()
+RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE
+AS $$
+SELECT '[' || chr(x'2300'::int) || '-' || chr(x'23FF'::int)
+    || chr(x'2600'::int) || '-' || chr(x'2604'::int)
+    || chr(x'2606'::int) || '-' || chr(x'27BF'::int)
+    || chr(x'1F000'::int) || '-' || chr(x'1F2FF'::int)
+    || chr(x'1F650'::int) || '-' || chr(x'1F8FF'::int)
+    || chr(x'1FA00'::int) || '-' || chr(x'1FAFF'::int) || ']'
+$$;
+
+CREATE FUNCTION orafit._display_width(value text)
+RETURNS integer LANGUAGE sql IMMUTABLE PARALLEL SAFE
+AS $$
+SELECT 2 * char_length($1) - char_length(regexp_replace($1, orafit._wide_class(), '', 'g'))
+$$;
+
 CREATE FUNCTION orafit._pad(
     value text, target_length numeric, fill text, left_side boolean)
 RETURNS text
@@ -261,17 +334,53 @@ AS $$
 DECLARE
     requested integer;
     padded text;
+    wide text := orafit._wide_class();
+    value_width integer;
+    remaining integer;
+    used integer := 0;
+    cols integer := 0;
+    character text;
+    character_width integer;
+    taken text := '';
+    pad text := '';
+    position integer := 1;
+    fill_length integer := char_length(fill);
 BEGIN
     IF value IS NULL OR value = '' OR target_length IS NULL OR fill IS NULL OR fill = '' THEN
         RETURN NULL;
     END IF;
-    -- Oracle pads by display width, so a full-width character counts as two columns. PostgreSQL
-    -- counts characters; only the Latin range, where both agree, is supported.
-    IF value ~ ('[^' || chr(1) || '-' || chr(767) || ']') OR fill ~ ('[^' || chr(1) || '-' || chr(767) || ']') THEN
-        RAISE EXCEPTION 'Orafit: LPAD/RPAD of characters outside the Latin range needs Oracle display-width semantics'
-            USING ERRCODE = '0A000';
-    END IF;
     requested := pg_catalog.trunc(target_length)::integer;
+    IF value ~ wide OR fill ~ wide THEN
+        IF value ~ orafit._unverified_width_class() OR fill ~ orafit._unverified_width_class() THEN
+            RAISE EXCEPTION 'Orafit: LPAD/RPAD width of this character block is not verified against Oracle'
+                USING ERRCODE = '0A000';
+        END IF;
+        IF requested < 1 THEN RETURN NULL; END IF;
+        value_width := orafit._display_width(value);
+        IF value_width >= requested THEN
+            FOREACH character IN ARRAY string_to_array(value, NULL) LOOP
+                character_width := CASE WHEN character ~ wide THEN 2 ELSE 1 END;
+                EXIT WHEN cols + character_width > requested;
+                taken := taken || character;
+                cols := cols + character_width;
+            END LOOP;
+            pad := repeat(' ', requested - cols);
+            padded := CASE WHEN left_side THEN pad || taken ELSE taken || pad END;
+        ELSE
+            remaining := requested - value_width;
+            LOOP
+                character := substr(fill, position, 1);
+                character_width := CASE WHEN character ~ wide THEN 2 ELSE 1 END;
+                EXIT WHEN used + character_width > remaining;
+                pad := pad || character;
+                used := used + character_width;
+                position := position % fill_length + 1;
+            END LOOP;
+            taken := repeat(' ', remaining - used);
+            padded := CASE WHEN left_side THEN taken || pad || value ELSE value || pad || taken END;
+        END IF;
+        RETURN padded;
+    END IF;
     IF left_side THEN
         padded := pg_catalog.lpad(value, requested, fill);
     ELSE

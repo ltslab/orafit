@@ -11,8 +11,100 @@ AS $$ SELECT orafit.divide(extract(epoch FROM ($1 - $2)), 86400) $$;
 CREATE FUNCTION orafit._pg_datetime_format(format text)
 RETURNS text
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
--- FF3 and FF6 are the only fractional-second elements the Java gate admits; PostgreSQL 13+ owns both.
-AS $$ SELECT $1 $$;
+-- FF1..FF6 are native PostgreSQL elements and truncate like Oracle's. PostgreSQL timestamps stop at
+-- microseconds, so FF7..FF9 print the six stored digits followed by zeros.
+AS $$
+SELECT regexp_replace(regexp_replace(regexp_replace($1,
+    'FF7', 'FF6"0"', 'gi'), 'FF8', 'FF6"00"', 'gi'), 'FF9', 'FF6"000"', 'gi')
+$$;
+
+-- Oracle fills what a TO_DATE/TO_TIMESTAMP format leaves out from the current date (year, then
+-- month; day defaults to 1) and reads YY as the current century. PostgreSQL uses year 1 and January
+-- and a 1970 pivot, so the pair is rewritten to a complete YYYY/MM format first. Returns
+-- {value, format}; both are unchanged when nothing needs completing.
+CREATE FUNCTION orafit._complete_datetime(value text, format text)
+RETURNS text[]
+LANGUAGE plpgsql STABLE PARALLEL SAFE
+AS $$
+DECLARE
+    rest text := format;
+    token text;
+    pattern text := '^[[:space:]]*';
+    new_format text := '';
+    tokens text[] := ARRAY[]::text[];
+    separators text[] := ARRAY[]::text[];
+    parts text[];
+    new_value text := '';
+    has_year boolean := false;
+    has_month boolean := false;
+    has_two_digit_year boolean := false;
+    digits integer;
+    today timestamp := orafit.sysdate();
+    i integer;
+BEGIN
+    IF upper(left(btrim(format), 2)) = 'FX' THEN
+        IF upper(format) ~ '(^|[^Y])YY([^Y]|$)' OR upper(format) !~ 'YYYY' OR upper(format) !~ 'MM' THEN
+            RAISE EXCEPTION 'Orafit: FX with a two-digit year or omitted year/month is not supported'
+                USING ERRCODE = '0A000';
+        END IF;
+        RETURN ARRAY[value, format];
+    END IF;
+    IF NOT (upper(format) ~ '(^|[^Y])YY([^Y]|$)' OR upper(format) !~ 'YYYY' OR upper(format) !~ 'MM') THEN
+        RETURN ARRAY[value, format];
+    END IF;
+    rest := upper(format);
+    WHILE rest <> '' LOOP
+        token := substring(rest FROM '^(YYYY|YY|HH24|HH12|MM|DD|MI|SS|FF[1-6])');
+        IF token IS NOT NULL THEN
+            digits := CASE WHEN token = 'YYYY' THEN 4 WHEN left(token, 2) = 'FF' THEN 6 ELSE 2 END;
+            rest := substr(rest, length(token) + 1);
+            IF rest ~ '^[A-Z]' THEN
+                pattern := pattern || '([0-9]{' || digits || '})';
+            ELSE
+                pattern := pattern || '([0-9]{1,' || digits || '})';
+            END IF;
+            tokens := array_append(tokens, token);
+            separators := array_append(separators, ''::text);
+            has_year := has_year OR token IN ('YYYY', 'YY');
+            has_month := has_month OR token = 'MM';
+            has_two_digit_year := has_two_digit_year OR token = 'YY';
+        ELSIF left(rest, 1) !~ '[[:alnum:]]' THEN
+            pattern := pattern || '[^[:alnum:]]*';
+            IF cardinality(tokens) > 0 THEN
+                separators[cardinality(separators)] := separators[cardinality(separators)] || left(rest, 1);
+            END IF;
+            rest := substr(rest, 2);
+        ELSE
+            RAISE EXCEPTION 'Orafit: unsupported date format token' USING ERRCODE = '0A000';
+        END IF;
+    END LOOP;
+    parts := regexp_match(btrim(value), pattern);
+    IF parts IS NULL THEN
+        RAISE EXCEPTION 'ORA-01861: literal does not match format string' USING ERRCODE = '22008';
+    END IF;
+    FOR i IN 1..cardinality(tokens) LOOP
+        IF tokens[i] = 'YY' THEN
+            new_value := new_value || (extract(year FROM today)::integer / 100 * 100
+                + parts[i]::integer)::text;
+            new_format := new_format || 'YYYY';
+        ELSE
+            new_value := new_value || parts[i];
+            new_format := new_format || tokens[i];
+        END IF;
+        new_value := new_value || separators[i];
+        new_format := new_format || separators[i];
+    END LOOP;
+    IF NOT has_year THEN
+        new_value := new_value || ' ' || extract(year FROM today)::integer::text;
+        new_format := new_format || ' YYYY';
+    END IF;
+    IF NOT has_month THEN
+        new_value := new_value || ' ' || extract(month FROM today)::integer::text;
+        new_format := new_format || ' MM';
+    END IF;
+    RETURN ARRAY[new_value, new_format];
+END
+$$;
 
 CREATE FUNCTION orafit.to_date(value text, format text DEFAULT 'YYYY-MM-DD')
 RETURNS timestamp without time zone
@@ -29,8 +121,13 @@ DECLARE
     digits integer;
     calendar_parts text[];
     calendar_date date;
+    completed text[];
 BEGIN
     IF value IS NULL OR btrim(value) = '' THEN RETURN NULL; END IF;
+    completed := orafit._complete_datetime(value, format);
+    IF completed[2] IS DISTINCT FROM format THEN
+        RETURN orafit.to_date(completed[1], completed[2]);
+    END IF;
     pg_format := orafit._pg_datetime_format(format);
     IF btrim(value) ~ '^[0-9]+$' AND upper(left(format, 2)) <> 'FX' THEN
         pg_format := regexp_replace(pg_format, '[^[:alnum:]]', '', 'g');
@@ -125,15 +222,20 @@ DECLARE
     pattern text := '^[[:space:]]*';
     consumed text;
     digits integer;
+    completed text[];
 BEGIN
     IF value IS NULL OR btrim(value) = '' THEN RETURN NULL; END IF;
+    completed := orafit._complete_datetime(value, format);
+    IF completed[2] IS DISTINCT FROM format THEN
+        RETURN orafit.to_timestamp(completed[1], completed[2]);
+    END IF;
     pg_format := orafit._pg_datetime_format(format);
     parsed := pg_catalog.to_timestamp(btrim(value), pg_format)::timestamp without time zone;
     -- PostgreSQL silently ignores trailing input; Oracle raises ORA-01830. Track the input the
     -- numeric tokens consume, exactly as TO_DATE does.
     rest := regexp_replace(upper(format), '^FX', '');
     WHILE rest <> '' LOOP
-        token := substring(rest FROM '^(YYYY|HH24|HH12|MM|DD|MI|SS|FF[36])');
+        token := substring(rest FROM '^(YYYY|HH24|HH12|MM|DD|MI|SS|FF[1-6])');
         IF token IS NOT NULL THEN
             digits := CASE WHEN token = 'YYYY' THEN 4 WHEN left(token, 2) = 'FF' THEN 6 ELSE 2 END;
             rest := substr(rest, length(token) + 1);

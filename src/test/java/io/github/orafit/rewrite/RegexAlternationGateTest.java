@@ -26,6 +26,9 @@ final class RegexAlternationGateTest {
             strings = {
                 "a|ab|abc",
                 "^(a|ab)$",
+                "(ab|a)c",
+                "(abc|a)+",
+                "x(foobar|foo)y",
                 "x(foo|foobar)y",
                 "^(a[0-9]|b)$",
                 "x(a|)y",
@@ -43,6 +46,10 @@ final class RegexAlternationGateTest {
     @ParameterizedTest
     @ValueSource(
             strings = {
+                "abc|ab|a",
+                "^(abc|ab|a)$",
+                "x(foobar|foo)",
+                "^(x|y)(abc|ab)$",
                 "abc",
                 "^(Mon|Tue|Wed)$",
                 "(abc|abd)[0-9]+",

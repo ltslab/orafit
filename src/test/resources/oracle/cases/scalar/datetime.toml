@@ -1100,7 +1100,7 @@ mode = "same"
 
 [[case]]
 id = "datetime.to-date-omitted-year-month"
-title = "TO_DATE fills omitted year and month from the session date, so it fails closed"
+title = "TO_DATE fills an omitted year and month from the current date"
 kind = "query"
 compare = "ordered"
 sql = """
@@ -1111,14 +1111,11 @@ SELECT TO_DATE('12:30', 'HH24:MI') AS value FROM dual
 outcome = "success"
 
 [case.orafit]
-mode = "reject"
-stage = "translation"
-code = "FUNCTION_TO_DATE_FORMAT"
-reason = "Oracle defaults the omitted year and month to the current ones; PostgreSQL uses year 1 and January."
+mode = "same"
 
 [[case]]
 id = "datetime.to-date-two-digit-year"
-title = "TO_DATE YY uses Oracle's current-century rule, so it fails closed"
+title = "TO_DATE YY resolves to the current century"
 kind = "query"
 compare = "ordered"
 sql = """
@@ -1129,10 +1126,7 @@ SELECT TO_DATE('99-01-01', 'YY-MM-DD') AS value FROM dual
 outcome = "success"
 
 [case.orafit]
-mode = "reject"
-stage = "translation"
-code = "FUNCTION_TO_DATE_FORMAT"
-reason = "Oracle YY resolves to the current century (2099); PostgreSQL applies a 1970 pivot (1999)."
+mode = "same"
 
 [[case]]
 id = "datetime.current-date-shape"
@@ -1141,6 +1135,81 @@ kind = "query"
 compare = "shape"
 sql = """
 SELECT CURRENT_DATE AS now_value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "datetime.to-date-omitted-year"
+title = "TO_DATE without a year uses the current year"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TO_DATE('01-15', 'MM-DD') AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "datetime.to-date-omitted-month-and-year"
+title = "TO_DATE with only a day uses the current year and month"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TO_DATE('15', 'DD') AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "datetime.to-date-year-only"
+title = "TO_DATE with only a year uses the current month"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TO_DATE('2024', 'YYYY') AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "datetime.to-date-two-digit-year-compact"
+title = "TO_DATE YYMMDD with a two-digit year"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TO_DATE('260115', 'YYMMDD') AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "datetime.to-timestamp-fraction-digits"
+title = "TO_TIMESTAMP accepts FF1 to FF6 input"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TO_TIMESTAMP('2024-01-02 03:04:05.12345', 'YYYY-MM-DD HH24:MI:SS.FF5') AS value FROM dual
 """
 
 [case.oracle]

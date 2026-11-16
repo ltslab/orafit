@@ -277,12 +277,12 @@ final class OracleFunctionRule {
         checked(function, name, 1, 2, helper);
         if (function.getParameters() != null && function.getParameters().size() == 2) {
             Expression format = function.getParameters().get(1);
-            // Oracle fills omitted year/month from the session date; PostgreSQL uses year 1 and
-            // January, so only formats that name both fields are equivalent for parsing.
+            // Parsing stores microseconds at most, so FF7..FF9 input cannot be kept; printing them
+            // is
+            // fine (the stored six digits, then zeros).
             boolean parsing = name.equals("TO_DATE") || name.equals("TO_TIMESTAMP");
             if (!(format instanceof StringValue literal)
-                    || !safeDateFormat(literal.getValue())
-                    || parsing && !namesYearAndMonth(literal.getValue())) {
+                    || !safeDateFormat(literal.getValue(), parsing)) {
                 throw new TranslationException(
                         "FUNCTION_" + name + "_FORMAT",
                         name
@@ -481,15 +481,11 @@ final class OracleFunctionRule {
         return false;
     }
 
-    private static boolean namesYearAndMonth(String format) {
-        String upper = format.toUpperCase(Locale.ROOT);
-        return upper.contains("YYYY") && upper.contains("MM");
-    }
-
-    private static boolean safeDateFormat(String format) {
+    private static boolean safeDateFormat(String format, boolean parsing) {
         String upper = format.toUpperCase(Locale.ROOT);
         String[] tokens = {
-            "HH24", "HH12", "YYYY", "TZH", "TZM", "FF6", "FF3", "SS", "MI", "MM", "DD"
+            "HH24", "HH12", "YYYY", "TZH", "TZM", "FF9", "FF8", "FF7", "FF6", "FF5", "FF4", "FF3",
+            "FF2", "FF1", "SS", "MI", "MM", "DD", "YY"
         };
         int i = upper.startsWith("FX") ? 2 : 0;
         int start = i;
@@ -506,6 +502,8 @@ final class OracleFunctionRule {
                 }
             }
             if (found == null) return false;
+            if (parsing && (found.equals("FF7") || found.equals("FF8") || found.equals("FF9")))
+                return false;
             i += found.length();
         }
         return i > start;

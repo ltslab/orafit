@@ -54,19 +54,49 @@ final class NumberTextConversionPostgresTest {
     }
 
     @Test
-    void toCharBeyondFortyCharactersFailsClosedInsteadOfPrintingPlainDigits() throws Exception {
-        // Oracle switches to scientific notation (1.0E+40); PostgreSQL has no equivalent.
+    void toCharUsesScientificNotationWhenPlainDigitsDoNotFit() throws Exception {
         assertEquals(
-                "0A000",
-                failure("SELECT TO_CHAR(10000000000000000000000000000000000000000) FROM dual")
-                        .getSQLState());
+                "1.0000000000000000000000000000000000E+40",
+                scalar("SELECT TO_CHAR(10000000000000000000000000000000000000000) FROM dual"));
         assertEquals(
-                "0A000",
-                failure("SELECT TO_CHAR(-1000000000000000000000000000000000000000) FROM dual")
-                        .getSQLState());
+                "-1.000000000000000000000000000000000E+39",
+                scalar("SELECT TO_CHAR(-1000000000000000000000000000000000000000) FROM dual"));
         assertEquals(
-                "0A000",
-                failure("SELECT TO_CHAR(0.0000000000000000000000000000000000000001) FROM dual")
-                        .getSQLState());
+                "1.0000000000000000000000000000000000E-40",
+                scalar("SELECT TO_CHAR(0.0000000000000000000000000000000000000001) FROM dual"));
+        assertEquals(
+                "1.5000000000000000000000000000000000E-39",
+                scalar("SELECT TO_CHAR(0.0000000000000000000000000000000000000015) FROM dual"));
+        assertEquals(
+                "1.2345678901234567890123456789012346E-06",
+                scalar("SELECT TO_CHAR(0.0000012345678901234567890123456789012345678) FROM dual"));
+        assertEquals(
+                "-3.333333333333333333333333333333333E-39",
+                scalar(
+                        "SELECT TO_CHAR(-0.000000000000000000000000000000000000003333333333333333333333333333333333333) FROM dual"));
+    }
+
+    @Test
+    void toCharRoundsToFortyCharactersWhenThePlainFormStillFits() throws Exception {
+        assertEquals(
+                ".001234567890123456789012345678901234568",
+                scalar("SELECT TO_CHAR(0.0012345678901234567890123456789012345678) FROM dual"));
+        assertEquals(
+                "-.01234567890123456789012345678901234568",
+                scalar("SELECT TO_CHAR(-0.012345678901234567890123456789012345678) FROM dual"));
+        assertEquals(
+                "123456789012345678901234567890123456790",
+                scalar("SELECT TO_CHAR(123456789012345678901234567890123456789.5) FROM dual"));
+        assertEquals(
+                ".333333333333333333333333333333333333333",
+                scalar("SELECT TO_CHAR(1/3) FROM dual"));
+        assertEquals(
+                "-.33333333333333333333333333333333333333",
+                scalar("SELECT TO_CHAR(-1/3) FROM dual"));
+    }
+
+    @Test
+    void toCharOfAThreeDigitExponentStillFailsClosed() throws Exception {
+        assertEquals("0A000", failure("SELECT TO_CHAR(1e100) FROM dual").getSQLState());
     }
 }
