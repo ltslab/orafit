@@ -107,6 +107,7 @@ public final class SqlGate {
         if (!preprocessed.equals(lexical.sql())) lexical = lexical(preprocessed, true, true);
         String masked = lexical.masked();
         if (block.statementCount() <= 1) rejectMultipleStatements(masked);
+        rejectLockWait(masked);
         EnumSet<Feature> features = EnumSet.noneOf(Feature.class);
 
         if (wordSequence(masked, "SELECT", "UNIQUE")) features.add(Feature.SELECT_UNIQUE);
@@ -174,6 +175,18 @@ public final class SqlGate {
                         "MULTI_STATEMENT",
                         "Only one SQL statement per execution is supported (Oracle ORA-00933)");
             }
+        }
+    }
+
+    private static final Pattern FOR_UPDATE_WAIT =
+            Pattern.compile("\\bFOR\\s+UPDATE\\b[^;]*?\\bWAIT\\s+\\d", Pattern.CASE_INSENSITIVE);
+
+    /** PostgreSQL has no per-statement lock wait time, so WAIT n cannot keep Oracle's meaning. */
+    private static void rejectLockWait(String masked) throws TranslationException {
+        if (FOR_UPDATE_WAIT.matcher(masked).find()) {
+            throw new TranslationException(
+                    "FOR_UPDATE_WAIT",
+                    "FOR UPDATE WAIT n has no PostgreSQL equivalent; use NOWAIT or no WAIT clause");
         }
     }
 

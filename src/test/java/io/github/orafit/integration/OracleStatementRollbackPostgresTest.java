@@ -16,7 +16,7 @@ import java.sql.Statement;
 
 /** Verifies Oracle-style statement rollback against a real PostgreSQL server. */
 @Execution(ExecutionMode.SAME_THREAD)
-final class OracleStatementRollbackPostgresIT {
+final class OracleStatementRollbackPostgresTest {
     @Test
     void failedStatementDoesNotAbortTheTransaction() throws Exception {
         try (Connection connection = IntegrationSupport.open();

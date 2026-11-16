@@ -20,6 +20,12 @@ BEGIN
     -- conversion therefore omits insignificant fractional zeros, unlike PostgreSQL numeric.
     result := pg_catalog.trim_scale(value)::text;
     result := regexp_replace(result, '^(-?)0[.]', '\1.');
+    -- Beyond forty characters Oracle prints scientific notation (or rounds to fit); neither has a
+    -- PostgreSQL equivalent, so do not print plain digits that Oracle would not.
+    IF length(result) > 40 THEN
+        RAISE EXCEPTION 'Orafit: TO_CHAR of a NUMBER needing more than 40 characters has no PostgreSQL equivalent'
+            USING ERRCODE = '0A000';
+    END IF;
     IF decimal_character <> '.' THEN result := replace(result, '.', decimal_character); END IF;
     RETURN result;
 END

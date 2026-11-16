@@ -1178,3 +1178,49 @@ outcome = "success"
 
 [case.orafit]
 mode = "same"
+
+[[case]]
+id = "number.to-number-overflow"
+title = "TO_NUMBER above 1E126 is ORA-01426"
+kind = "query"
+compare = "error"
+sql = """
+SELECT TO_NUMBER('1e126') AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "error"
+error_code = 1426
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "number.to-number-underflow"
+title = "TO_NUMBER below 1E-130 is zero"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TO_NUMBER('1e-131') AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "number.to-number-rounds-to-38-digits"
+title = "TO_NUMBER keeps 38 significant digits"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TO_NUMBER('12345678901234567890123456789012345678901234') AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"

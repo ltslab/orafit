@@ -44,8 +44,40 @@ final class JdbcMetadata {
                             && raw instanceof BigDecimal number) {
                         return oracleNumberResult(result, call.args(), number);
                     }
+                    if (method.getName().equals("getObject")
+                            && call.args() != null
+                            && call.args().length == 1) {
+                        int ordinal =
+                                call.args()[0] instanceof Integer index
+                                        ? index
+                                        : result.findColumn((String) call.args()[0]);
+                        return oracleObject(result, plan, bindWidths, ordinal, raw);
+                    }
                     return raw;
                 });
+    }
+
+    /** getObject follows the Oracle type: NUMBER is a BigDecimal and DATE a Timestamp. */
+    private static Object oracleObject(
+            ResultSet result, ResultMetadataPlan plan, int[] bindWidths, int ordinal, Object raw)
+            throws SQLException {
+        boolean integral =
+                raw instanceof Integer
+                        || raw instanceof Long
+                        || raw instanceof Short
+                        || raw instanceof Byte
+                        || raw instanceof java.math.BigInteger;
+        boolean date = raw instanceof java.sql.Date;
+        if (!integral && !date) return raw;
+        int type = oracleMetadata(result, plan, bindWidths).getColumnType(ordinal);
+        if (integral && type == Types.NUMERIC) {
+            return oracleNumberResult(
+                    result, new Object[] {ordinal}, new BigDecimal(raw.toString()));
+        }
+        if (date && (type == Types.TIMESTAMP || type == Types.DATE)) {
+            return new java.sql.Timestamp(((java.sql.Date) raw).getTime());
+        }
+        return raw;
     }
 
     private static String oracleStringResult(
@@ -227,6 +259,12 @@ final class JdbcMetadata {
                                                                 method, delegate, args))
                                                 .toUpperCase(java.util.Locale.ROOT);
                         case "getColumnType" -> jdbcType(column.kind(), type);
+                        case "getColumnClassName" ->
+                                switch (jdbcType(column.kind(), type)) {
+                                    case Types.NUMERIC, Types.DECIMAL -> "java.math.BigDecimal";
+                                    case Types.TIMESTAMP, Types.DATE -> "java.sql.Timestamp";
+                                    default -> JdbcProxy.invokeDelegate(method, delegate, args);
+                                };
                         case "getColumnTypeName" ->
                                 typeName(column.kind(), type, delegate.getColumnTypeName(ordinal));
                         case "getPrecision" ->

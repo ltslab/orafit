@@ -424,6 +424,12 @@ final class OracleFunctionRule {
             throw new TranslationException(
                     "REGEXP_PATTERN", "Oracle REGEXP pattern exceeds 512 bytes");
         }
+        if (RegexAlternation.ambiguous(pattern)) {
+            throw new TranslationException(
+                    "REGEXP_PATTERN",
+                    "Alternatives that can match at the same position differ: Oracle keeps the first,"
+                            + " PostgreSQL the longest");
+        }
         for (int i = 0; i < pattern.length(); i++) {
             char c = pattern.charAt(i);
             if (c == '(' && i + 1 < pattern.length() && pattern.charAt(i + 1) == '?') {
