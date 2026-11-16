@@ -82,9 +82,32 @@ public final class CompatibilityExecutor {
     }
 
     private Observation executeUpdate(CompatibilityCase test) throws Exception {
-        try (PreparedStatement statement = connection.prepareStatement(test.sql())) {
+        boolean keys = !test.generatedKeys().isEmpty();
+        try (PreparedStatement statement =
+                keys
+                        ? connection.prepareStatement(
+                                test.sql(), test.generatedKeys().toArray(new String[0]))
+                        : connection.prepareStatement(test.sql())) {
             applyInputs(statement, test.binds());
             Observation result = Observation.ok().withUpdateCount(statement.executeUpdate());
+            if (keys) {
+                // Labels first, then the rows of getGeneratedKeys().
+                List<List<Object>> generated = new ArrayList<>();
+                try (ResultSet rows = statement.getGeneratedKeys()) {
+                    ResultSetMetaData metadata = rows.getMetaData();
+                    List<Object> labels = new ArrayList<>();
+                    for (int i = 1; i <= metadata.getColumnCount(); i++)
+                        labels.add(metadata.getColumnLabel(i));
+                    generated.add(labels);
+                    while (rows.next()) {
+                        List<Object> row = new ArrayList<>();
+                        for (int i = 1; i <= metadata.getColumnCount(); i++)
+                            row.add(rows.getString(i));
+                        generated.add(row);
+                    }
+                }
+                result = result.withReturningRows(generated);
+            }
             return observe(test, result);
         }
     }
@@ -201,6 +224,8 @@ public final class CompatibilityExecutor {
             switch (bind.type()) {
                 case VARCHAR -> statement.setString(bind.index(), bind.value());
                 case INTEGER -> statement.setInt(bind.index(), Integer.parseInt(bind.value()));
+                case BOOLEAN ->
+                        statement.setBoolean(bind.index(), Boolean.parseBoolean(bind.value()));
                 case DECIMAL -> statement.setBigDecimal(bind.index(), new BigDecimal(bind.value()));
                 case DATE -> statement.setDate(bind.index(), java.sql.Date.valueOf(bind.value()));
                 case TIMESTAMP ->
@@ -227,6 +252,7 @@ public final class CompatibilityExecutor {
             case VARCHAR -> Types.VARCHAR;
             case INTEGER -> Types.INTEGER;
             case DECIMAL -> Types.NUMERIC;
+            case BOOLEAN -> Types.BOOLEAN;
             case DATE -> Types.DATE;
             case TIMESTAMP -> Types.TIMESTAMP;
             case TIMESTAMP_TZ -> Types.TIMESTAMP_WITH_TIMEZONE;
@@ -320,6 +346,7 @@ public final class CompatibilityExecutor {
                 BigDecimal value = statement.getBigDecimal(bind.index());
                 yield statement.wasNull() ? null : value.toPlainString();
             }
+            case BOOLEAN -> throw new IllegalArgumentException("BOOLEAN cannot be an output bind");
             case INTEGER -> {
                 int value = statement.getInt(bind.index());
                 yield statement.wasNull() ? null : Integer.toString(value);

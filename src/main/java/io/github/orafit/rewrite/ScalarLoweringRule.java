@@ -328,7 +328,14 @@ final class ScalarLoweringRule {
             return clause;
         }
         if (expression instanceof IsNullExpression test) {
-            test.setLeftExpression(lower(test.getLeftExpression(), change));
+            Expression operand = lower(test.getLeftExpression(), change);
+            if (operand instanceof JdbcNamedParameter) {
+                // stringtype=unspecified leaves a bare bind untyped, so PostgreSQL cannot plan
+                // "? IS NULL"; nullness does not depend on the type, so give it one.
+                operand = OracleCoercion.text(operand);
+                change.changed = true;
+            }
+            test.setLeftExpression(operand);
             return test;
         }
         if (expression instanceof LikeExpression like) {
@@ -653,12 +660,41 @@ final class ScalarLoweringRule {
     private static boolean knownDate(Expression value) {
         if (value instanceof DateTimeLiteralExpression literal
                 && literal.getType() == DateTimeLiteralExpression.DateTime.DATE) return true;
+        if (value
+                        instanceof
+                        net.sf.jsqlparser.expression.operators.relational.ParenthesedExpressionList<
+                                        ?>
+                                group
+                && group.size() == 1) return knownDate(group.get(0));
+        if (value instanceof Addition || value instanceof Subtraction) {
+            BinaryExpression binary = (BinaryExpression) value;
+            Expression left = binary.getLeftExpression(), right = binary.getRightExpression();
+            return (knownDate(left) && !knownDate(right) && dayOffset(right))
+                    || (value instanceof Addition
+                            && knownDate(right)
+                            && !knownDate(left)
+                            && dayOffset(left));
+        }
         if (!(value instanceof Function function) || function.getName() == null) return false;
+        if ((OracleCoercion.unqualified(function, "TRUNC")
+                        || OracleCoercion.unqualified(function, "ROUND")
+                        || "orafit.trunc".equalsIgnoreCase(function.getName())
+                        || "orafit.round".equalsIgnoreCase(function.getName()))
+                && function.getParameters() != null
+                && !function.getParameters().isEmpty())
+            return knownDate(function.getParameters().get(0));
         return "orafit.cast_date".equalsIgnoreCase(function.getName())
                 || "orafit.sysdate".equalsIgnoreCase(function.getName())
                 || OracleCoercion.unqualified(function, "TO_DATE")
                 || OracleCoercion.unqualified(function, "LAST_DAY")
                 || OracleCoercion.unqualified(function, "ADD_MONTHS");
+    }
+
+    /** A day count, either as written or after {@code lowerDays} turned it into an interval. */
+    private static boolean dayOffset(Expression value) {
+        return dayNumber(value)
+                || (value instanceof Function function
+                        && "orafit.days_interval".equalsIgnoreCase(function.getName()));
     }
 
     private static boolean dayNumber(Expression value) {
@@ -726,7 +762,8 @@ final class ScalarLoweringRule {
                     "SEQUENCE_NAME", "Oracle sequence reference has no sequence name");
         }
         return new Function(
-                "pg_catalog." + operation.toLowerCase(Locale.ROOT), new StringValue(sequence));
+                "pg_catalog." + operation.toLowerCase(Locale.ROOT),
+                new Function("orafit.sequence", new StringValue(sequence)));
     }
 
     private static Expression varchar(Expression value) {

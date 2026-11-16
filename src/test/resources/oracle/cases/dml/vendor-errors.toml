@@ -1,0 +1,98 @@
+version = 1
+feature = "vendor-errors"
+
+[[case]]
+id = "vendor-error.missing-table"
+title = "A missing table raises ORA-00942"
+kind = "query"
+compare = "error"
+sql = """
+SELECT * FROM bs_no_such_table
+"""
+
+[case.oracle]
+outcome = "error"
+error_code = 942
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "vendor-error.missing-column"
+title = "A missing column raises ORA-00904"
+kind = "query"
+compare = "error"
+sql = """
+SELECT bs_no_such_column FROM bs_dept
+"""
+
+[case.oracle]
+outcome = "error"
+error_code = 904
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "vendor-error.ambiguous-column"
+title = "An ambiguous column raises ORA-00918"
+kind = "query"
+compare = "error"
+sql = """
+SELECT deptno FROM bs_dept a, bs_dept b
+"""
+
+[case.oracle]
+outcome = "error"
+error_code = 918
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "vendor-error.precision-overflow"
+title = "A value beyond the column precision raises ORA-01438"
+kind = "update"
+compare = "error"
+sql = """
+INSERT INTO bs_dml(id) VALUES (1234567)
+"""
+
+[case.oracle]
+outcome = "error"
+error_code = 1438
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "vendor-error.check-constraint"
+title = "A check constraint violation raises ORA-02290"
+kind = "update"
+compare = "error"
+sql = """
+INSERT INTO bs_checked(id, qty) VALUES (1, -1)
+"""
+
+[case.oracle]
+outcome = "error"
+error_code = 2290
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "vendor-error.missing-sequence"
+title = "A missing sequence raises ORA-02289"
+kind = "query"
+compare = "error"
+sql = """
+SELECT bs_no_such_seq.NEXTVAL FROM dual
+"""
+
+[case.oracle]
+outcome = "error"
+error_code = 2289
+
+[case.orafit]
+mode = "same"

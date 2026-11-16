@@ -14,6 +14,12 @@ contract = "same"
 evidence = ["lexical.q-quoted-literal"]
 
 [[feature]]
+id = "quoted-identifier-case"
+area = "sql-core"
+scope = "owned"
+contract = "bounded"
+
+[[feature]]
 id = "lexical-other-literals"
 area = "sql-core"
 scope = "owned"
@@ -721,6 +727,32 @@ contract = "same"
 evidence = ["bind.concat-function", "bind.concat-null", "bind.concat-number", "bind.decode-source", "bind.greatest-argument", "bind.substr-length", "bind.instr-position-occurrence", "bind.regexp-input", "bind.listagg-delimiter"]
 
 [[feature]]
+id = "jdbc-bind-colon-placeholders"
+area = "jdbc"
+scope = "owned"
+contract = "same"
+evidence = ["bind.colon-named", "bind.colon-numbered-in-order", "bind.colon-numbered-out-of-order", "bind.colon-repeated-name", "bind.colon-in-literal"]
+
+[[feature]]
+id = "jdbc-database-metadata-catalog"
+area = "jdbc"
+scope = "owned"
+contract = "bounded"
+
+[[feature]]
+id = "jdbc-generated-keys-column-names"
+area = "jdbc"
+scope = "owned"
+contract = "same"
+evidence = ["generated-keys.upper-column", "generated-keys.two-columns", "generated-keys.update-statement"]
+
+[[feature]]
+id = "jdbc-generated-keys-other"
+area = "jdbc"
+scope = "owned"
+contract = "bounded"
+
+[[feature]]
 id = "jdbc-bind-lineage-other"
 area = "jdbc"
 scope = "owned"
@@ -744,7 +776,7 @@ id = "jdbc-vendor-error-core"
 area = "jdbc"
 scope = "owned"
 contract = "same"
-evidence = ["number.to-number-invalid", "datetime.to-date-format-mismatch", "subquery.scalar-multiple-row-error", "scope.case-result-coercion", "merge.on-column-update-error"]
+evidence = ["number.to-number-invalid", "datetime.to-date-format-mismatch", "subquery.scalar-multiple-row-error", "scope.case-result-coercion", "merge.on-column-update-error", "vendor-error.missing-table", "vendor-error.missing-column", "vendor-error.ambiguous-column", "vendor-error.precision-overflow", "vendor-error.check-constraint", "vendor-error.missing-sequence"]
 
 [[feature]]
 id = "jdbc-vendor-errors-other"

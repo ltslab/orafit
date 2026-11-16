@@ -342,7 +342,12 @@ final class OracleDifferentialIT {
                                     assertEquals(
                                             expected.postState(),
                                             actual.postState(),
-                                            prefix + "DML post-state"));
+                                            prefix + "DML post-state"),
+                            () ->
+                                    assertEquals(
+                                            expected.returningRows(),
+                                            actual.returningRows(),
+                                            prefix + "generated keys"));
             case CALL ->
                     assertAll(
                             prefix,

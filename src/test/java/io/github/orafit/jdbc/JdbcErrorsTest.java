@@ -85,10 +85,31 @@ final class JdbcErrorsTest {
     }
 
     @Test
-    void leavesUnrelatedCheckViolationsUnchanged() {
+    void mapsCheckViolationsToOra02290() {
         SQLException postgres =
                 new SQLException("new row violates check constraint \"positive_amount\"", "23514");
 
-        assertSame(postgres, JdbcErrors.fromDelegate(postgres));
+        SQLException mapped = JdbcErrors.fromDelegate(postgres);
+
+        assertEquals(2290, mapped.getErrorCode());
+        assertEquals("23000", mapped.getSQLState());
+        assertEquals("ORA-02290: check constraint (positive_amount) violated", mapped.getMessage());
+    }
+
+    @Test
+    void mapsMissingObjectsAndColumnPrecision() {
+        assertEquals(
+                942, JdbcErrors.fromDelegate(new SQLException("relation", "42P01")).getErrorCode());
+        assertEquals(
+                904, JdbcErrors.fromDelegate(new SQLException("column", "42703")).getErrorCode());
+        assertEquals(
+                918,
+                JdbcErrors.fromDelegate(new SQLException("ambiguous", "42702")).getErrorCode());
+        assertEquals(
+                1438,
+                JdbcErrors.fromDelegate(new SQLException("ERROR: numeric field overflow", "22003"))
+                        .getErrorCode());
+        SQLException other = new SQLException("value out of range", "22003");
+        assertSame(other, JdbcErrors.fromDelegate(other));
     }
 }

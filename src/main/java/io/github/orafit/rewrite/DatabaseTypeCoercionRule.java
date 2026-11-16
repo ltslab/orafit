@@ -711,6 +711,27 @@ public final class DatabaseTypeCoercionRule {
                     ? ColumnTypeResolver.Kind.DATE
                     : ColumnTypeResolver.Kind.TIMESTAMP;
         if (value == null || value instanceof NullValue) return ColumnTypeResolver.Kind.UNKNOWN;
+        if (value
+                        instanceof
+                        net.sf.jsqlparser.expression.operators.relational.ParenthesedExpressionList<
+                                        ?>
+                                group
+                && group.size() == 1) return kind(group.get(0), scope);
+        if (value instanceof Addition || value instanceof Subtraction) {
+            // Oracle: DATE +/- number is a DATE; only DATE - DATE is a NUMBER of days.
+            BinaryExpression binary = (BinaryExpression) value;
+            ColumnTypeResolver.Kind left = kind(binary.getLeftExpression(), scope);
+            ColumnTypeResolver.Kind right = kind(binary.getRightExpression(), scope);
+            if (left == ColumnTypeResolver.Kind.DATE
+                    && right != ColumnTypeResolver.Kind.DATE
+                    && right != ColumnTypeResolver.Kind.TIMESTAMP)
+                return ColumnTypeResolver.Kind.DATE;
+            if (value instanceof Addition
+                    && right == ColumnTypeResolver.Kind.DATE
+                    && left != ColumnTypeResolver.Kind.DATE
+                    && left != ColumnTypeResolver.Kind.TIMESTAMP)
+                return ColumnTypeResolver.Kind.DATE;
+        }
         if (value instanceof StringValue || OracleCoercion.knownText(value))
             return ColumnTypeResolver.Kind.TEXT;
         if (value instanceof LongValue
@@ -749,6 +770,15 @@ public final class DatabaseTypeCoercionRule {
                             "ORAFIT.CAST_DATE",
                             "ORAFIT.SYSDATE")
                     .contains(name)) return ColumnTypeResolver.Kind.DATE;
+            if (List.of("TRUNC", "ROUND", "ORAFIT.TRUNC", "ORAFIT.ROUND").contains(name)
+                    && function.getParameters() != null
+                    && !function.getParameters().isEmpty()) {
+                // TRUNC/ROUND of a DATE or TIMESTAMP is a DATE.
+                ColumnTypeResolver.Kind inner = kind(function.getParameters().get(0), scope);
+                if (inner == ColumnTypeResolver.Kind.DATE
+                        || inner == ColumnTypeResolver.Kind.TIMESTAMP)
+                    return ColumnTypeResolver.Kind.DATE;
+            }
             if (name.equals("ORAFIT.CAST_CHAR")) return ColumnTypeResolver.Kind.FIXED_CHAR;
             if (List.of("COUNT", "SUM", "AVG", "ORAFIT.DIVIDE").contains(name))
                 return ColumnTypeResolver.Kind.NUMBER;

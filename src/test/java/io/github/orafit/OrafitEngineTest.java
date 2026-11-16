@@ -163,17 +163,19 @@ public final class OrafitEngineTest {
 
         Translation sequence = engine.translate("SELECT emp_seq.NEXTVAL FROM DUAL");
         check(
-                sequence.sql().toLowerCase().contains("pg_catalog.nextval('emp_seq')"),
+                sequence.sql()
+                        .toLowerCase()
+                        .contains("pg_catalog.nextval(orafit.sequence('emp_seq'))"),
                 "Oracle NEXTVAL must lower to PostgreSQL sequence runtime");
         Translation sequenceInsert =
                 engine.translate(
                         "INSERT INTO t(id, parent_id) VALUES (app.seq.NEXTVAL, seq2.CURRVAL)");
         String sequenceInsertSql = sequenceInsert.sql().toLowerCase();
         check(
-                sequenceInsertSql.contains("pg_catalog.nextval('app.seq')"),
+                sequenceInsertSql.contains("pg_catalog.nextval(orafit.sequence('app.seq'))"),
                 "qualified NEXTVAL must preserve sequence name");
         check(
-                sequenceInsertSql.contains("pg_catalog.currval('seq2')"),
+                sequenceInsertSql.contains("pg_catalog.currval(orafit.sequence('seq2'))"),
                 "CURRVAL must lower to PostgreSQL sequence runtime");
 
         Translation bareRestart = engine.translate("ALTER SEQUENCE app.seq RESTART");

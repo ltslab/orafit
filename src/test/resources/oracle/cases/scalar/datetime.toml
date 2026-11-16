@@ -1217,3 +1217,63 @@ outcome = "success"
 
 [case.orafit]
 mode = "same"
+
+[[case]]
+id = "datetime.date-diff-trunc"
+title = "TRUNC of a DATE keeps DATE subtraction a NUMBER of days"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TRUNC(DATE '2024-03-02') - DATE '2024-03-01' AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "datetime.date-diff-added-days"
+title = "DATE plus days stays a DATE in a subtraction"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT (DATE '2024-03-01' + 5) - DATE '2024-03-01' AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "datetime.date-diff-nested-days"
+title = "Parenthesised DATE minus days stays a DATE in a subtraction"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT DATE '2024-03-05' - (DATE '2024-03-05' - 3) AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "datetime.date-diff-trunc-where"
+title = "Subtraction of TRUNC(DATE) compares as a number"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT 1 AS value FROM dual WHERE TRUNC(DATE '2024-03-05') - DATE '2024-03-01' > 3
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"

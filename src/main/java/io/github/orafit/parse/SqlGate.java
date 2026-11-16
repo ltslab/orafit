@@ -101,6 +101,7 @@ public final class SqlGate {
 
     public Scan scan(String sql) throws TranslationException {
         if (sql == null) throw new IllegalArgumentException("sql must not be null");
+        sql = colonBinds(sql);
         Lexical lexical = lexical(sql, true, true);
         DmlBlock block = unwrapDmlBlock(lexical.sql(), lexical.masked());
         String preprocessed = block.sql();
@@ -156,6 +157,43 @@ public final class SqlGate {
                 !preprocessed.equals(sql) || lexical.changed(),
                 block.statementCount() > 1,
                 lexical.timestampLiteral());
+    }
+
+    /**
+     * Oracle JDBC binds the {@code :name} and {@code :1} placeholders of a SQL statement by the
+     * order they appear, one parameter per occurrence, exactly like {@code ?}. They become {@code
+     * ?} before anything else reads the statement. PL/SQL blocks and calls keep their own forms.
+     */
+    private static String colonBinds(String sql) throws TranslationException {
+        if (sql.indexOf(':') < 0) return sql;
+        String masked = lexical(sql, false, false).masked();
+        if (firstWord(masked, "BEGIN")
+                || firstWord(masked, "DECLARE")
+                || firstWord(masked, "CALL")
+                || masked.stripLeading().startsWith("{")) return sql;
+        StringBuilder out = null;
+        int copyFrom = 0;
+        for (int i = 0; i < masked.length(); i++) {
+            if (masked.charAt(i) != ':') continue;
+            char next = i + 1 < masked.length() ? masked.charAt(i + 1) : ' ';
+            if (next == ':' || next == '=') {
+                i++;
+                continue;
+            }
+            if (i > 0 && identifier(masked.charAt(i - 1))) continue;
+            if (!identifier(next)) continue;
+            // Orafit's own private markers stay visible so the gate can reject them.
+            if (masked.regionMatches(true, i + 1, "__orafit_b", 0, 10)
+                    || masked.regionMatches(true, i + 1, "__ocp_", 0, 6)) continue;
+            int end = i + 1;
+            while (end < masked.length() && identifier(masked.charAt(end))) end++;
+            if (out == null) out = new StringBuilder(sql.length());
+            out.append(sql, copyFrom, i).append('?');
+            copyFrom = end;
+            i = end - 1;
+        }
+        if (out == null) return sql;
+        return out.append(sql, copyFrom, sql.length()).toString();
     }
 
     /**

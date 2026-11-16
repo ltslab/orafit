@@ -104,7 +104,10 @@ final class SequenceProjectionRule {
                 inner.add(
                         SelectItem.from(
                                 new Function(
-                                        "pg_catalog." + operation, new StringValue(entry.getKey())),
+                                        "pg_catalog." + operation,
+                                        new Function(
+                                                "orafit.sequence",
+                                                new StringValue(entry.getKey()))),
                                 new Alias(alias, true)));
                 for (Column column : entry.getValue()) replace(column, alias);
             }
