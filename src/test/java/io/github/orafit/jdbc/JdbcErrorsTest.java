@@ -24,6 +24,67 @@ final class JdbcErrorsTest {
     }
 
     @Test
+    void mapsCommonConstraintAndLockErrorsToOracleCodes() {
+        assertEquals(
+                1,
+                JdbcErrors.fromDelegate(
+                                new SQLException(
+                                        "ERROR: duplicate key value violates unique constraint"
+                                                + " \"emp_pkey\"",
+                                        "23505"))
+                        .getErrorCode());
+        assertEquals(
+                1400,
+                JdbcErrors.fromDelegate(new SQLException("null value", "23502")).getErrorCode());
+        assertEquals(
+                2291,
+                JdbcErrors.fromDelegate(
+                                new SQLException(
+                                        "insert or update on table \"c\" violates foreign key"
+                                                + " constraint \"fk\"",
+                                        "23503"))
+                        .getErrorCode());
+        assertEquals(
+                2292,
+                JdbcErrors.fromDelegate(
+                                new SQLException(
+                                        "update or delete on table \"p\" violates foreign key"
+                                                + " constraint \"fk\" on table \"c\"",
+                                        "23503"))
+                        .getErrorCode());
+        assertEquals(
+                60, JdbcErrors.fromDelegate(new SQLException("deadlock", "40P01")).getErrorCode());
+        assertEquals(
+                54,
+                JdbcErrors.fromDelegate(new SQLException("could not obtain lock on row", "55P03"))
+                        .getErrorCode());
+        SQLException timeout = JdbcErrors.fromDelegate(new SQLException("canceling", "57014"));
+        assertEquals(1013, timeout.getErrorCode());
+        assertTrue(timeout instanceof java.sql.SQLTimeoutException);
+    }
+
+    @Test
+    void doesNotScrapeOraCodesFromEchoedData() {
+        SQLException postgres =
+                new SQLException(
+                        "ERROR: bad\n  Detail: Key (c)=(ORA-00060) already exists.", "23999");
+
+        assertSame(postgres, JdbcErrors.fromDelegate(postgres));
+    }
+
+    @Test
+    void keepsBatchUpdateExceptionType() {
+        java.sql.BatchUpdateException batch =
+                new java.sql.BatchUpdateException("dup", "23505", 0, new int[] {1, 0}, null);
+
+        SQLException mapped = JdbcErrors.fromDelegate(batch);
+
+        assertTrue(mapped instanceof java.sql.BatchUpdateException);
+        assertEquals(1, mapped.getErrorCode());
+        assertEquals(2, ((java.sql.BatchUpdateException) mapped).getUpdateCounts().length);
+    }
+
+    @Test
     void leavesUnrelatedCheckViolationsUnchanged() {
         SQLException postgres =
                 new SQLException("new row violates check constraint \"positive_amount\"", "23514");

@@ -1178,3 +1178,74 @@ outcome = "success"
 
 [case.orafit]
 mode = "same"
+
+[[case]]
+id = "number.to-number-overflow"
+title = "TO_NUMBER above 1E126 is ORA-01426"
+kind = "query"
+compare = "error"
+sql = """
+SELECT TO_NUMBER('1e126') AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "error"
+error_code = 1426
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "number.to-number-underflow"
+title = "TO_NUMBER below 1E-130 is zero"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TO_NUMBER('1e-131') AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "number.to-number-rounds-to-38-digits"
+title = "TO_NUMBER keeps 38 significant digits"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TO_NUMBER('12345678901234567890123456789012345678901234') AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "number.to-char-forty-characters"
+title = "TO_CHAR rounds to forty characters or switches to scientific notation"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT CASE WHEN TO_CHAR(10000000000000000000000000000000000000000) = '1.0000000000000000000000000000000000E+40'
+             AND TO_CHAR(-1000000000000000000000000000000000000000) = '-1.000000000000000000000000000000000E+39'
+             AND TO_CHAR(0.0000000000000000000000000000000000000001) = '1.0000000000000000000000000000000000E-40'
+             AND TO_CHAR(0.0000000000000000000000000000000000000015) = '1.5000000000000000000000000000000000E-39'
+             AND TO_CHAR(0.0000012345678901234567890123456789012345678) = '1.2345678901234567890123456789012346E-06'
+             AND TO_CHAR(0.0012345678901234567890123456789012345678) = '.001234567890123456789012345678901234568'
+             AND TO_CHAR(-0.012345678901234567890123456789012345678) = '-.01234567890123456789012345678901234568'
+             AND TO_CHAR(123456789012345678901234567890123456789.5) = '123456789012345678901234567890123456790'
+             AND TO_CHAR(1/3) = '.333333333333333333333333333333333333333'
+             AND TO_CHAR(-1/3) = '-.33333333333333333333333333333333333333'
+        THEN 1 ELSE 0 END AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"

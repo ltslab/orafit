@@ -12,7 +12,6 @@ import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.sql.Savepoint;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.List;
@@ -286,18 +285,18 @@ final class PreparedRuntime {
         }
 
         private int executeUpdates() throws SQLException {
-            for (PreparedStatement delegate : delegates) delegate.executeUpdate();
+            for (PreparedStatement delegate : delegates) JdbcProxy.executeUpdate(delegate);
             return 1;
         }
 
         private long executeLargeUpdates() throws SQLException {
-            for (PreparedStatement delegate : delegates) delegate.executeLargeUpdate();
+            for (PreparedStatement delegate : delegates) JdbcProxy.executeLargeUpdate(delegate);
             return 1;
         }
 
         private Execution executeStatements() throws SQLException {
             for (PreparedStatement delegate : delegates) {
-                if (delegate.execute()) {
+                if (JdbcProxy.execute(delegate)) {
                     throw JdbcProxy.unsupported(
                             "Anonymous DML block statement unexpectedly produced a result set");
                 }
@@ -305,48 +304,10 @@ final class PreparedRuntime {
             return new Execution(false, 1);
         }
 
-        private <T> T executeAtomically(SqlOperation<T> operation) throws SQLException {
-            boolean autoCommit = delegateConnection.getAutoCommit();
-            Savepoint savepoint = null;
-            if (autoCommit) delegateConnection.setAutoCommit(false);
-            else savepoint = delegateConnection.setSavepoint();
-
-            T result = null;
-            SQLException failure = null;
-            try {
-                result = operation.execute();
-                if (autoCommit) delegateConnection.commit();
-                else delegateConnection.releaseSavepoint(savepoint);
-            } catch (SQLException executionFailure) {
-                failure = executionFailure;
-                try {
-                    if (autoCommit) {
-                        delegateConnection.rollback();
-                    } else {
-                        delegateConnection.rollback(savepoint);
-                        delegateConnection.releaseSavepoint(savepoint);
-                    }
-                } catch (SQLException rollbackFailure) {
-                    failure.addSuppressed(rollbackFailure);
-                }
-            }
-            if (autoCommit) {
-                try {
-                    delegateConnection.setAutoCommit(true);
-                } catch (SQLException restoreFailure) {
-                    if (failure == null) failure = restoreFailure;
-                    else failure.addSuppressed(restoreFailure);
-                }
-            }
-            if (failure != null) throw failure;
-            return result;
+        private <T> T executeAtomically(JdbcProxy.SqlOperation<T> operation) throws SQLException {
+            return JdbcProxy.atomically(delegateConnection, operation);
         }
 
         private record Execution(boolean resultSet, int updateCount) {}
-
-        @FunctionalInterface
-        private interface SqlOperation<T> {
-            T execute() throws SQLException;
-        }
     }
 }

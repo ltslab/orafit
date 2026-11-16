@@ -180,3 +180,51 @@ outcome = "success"
 
 [case.orafit]
 mode = "same"
+
+[[case]]
+id = "regexp.alternation-overlapping-branches"
+title = "Overlapping alternatives keep the first match in Oracle, the longest in PostgreSQL"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT REGEXP_SUBSTR('abcd', 'a|ab|abc') AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "reject"
+stage = "translation"
+code = "REGEXP_PATTERN"
+reason = "Oracle tries alternatives left to right and returns 'a'; PostgreSQL returns the longest match 'abc'."
+
+[[case]]
+id = "regexp.alternation-disjoint-literals"
+title = "Disjoint literal alternatives agree in both engines"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT CASE WHEN REGEXP_LIKE('Tue', '^(Mon|Tue|Wed)$') THEN 1 ELSE 0 END AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "regexp.alternation-longest-first"
+title = "Longest-first literal alternatives at the end of a pattern agree in both engines"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT CASE WHEN REGEXP_SUBSTR('abcd', 'abc|ab|a') = 'abc' AND REGEXP_SUBSTR('xabcd', 'x(abc|ab|a)') = 'xabc' THEN 1 ELSE 0 END AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"

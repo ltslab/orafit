@@ -745,3 +745,18 @@ outcome = "success"
 
 [case.orafit]
 mode = "same"
+
+[[case]]
+id = "string.instr-start-zero"
+title = "INSTR with start position 0 returns 0"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT INSTR('bananas', 'na', 0) AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"

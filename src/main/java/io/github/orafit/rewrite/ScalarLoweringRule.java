@@ -265,6 +265,13 @@ final class ScalarLoweringRule {
                     ? named
                     : new OracleNamedFunctionParameter(named.getName(), lowered);
         }
+        if (expression instanceof net.sf.jsqlparser.expression.TimeKeyExpression key
+                && "CURRENT_DATE".equalsIgnoreCase(key.getStringValue())) {
+            // Oracle CURRENT_DATE is a DATE with a time of day in the session time zone;
+            // PostgreSQL's CURRENT_DATE drops the time. The session-zone SYSDATE helper matches.
+            change.changed = true;
+            return new Function("orafit.sysdate");
+        }
         if (expression instanceof Column column) {
             if (SequenceProjectionRule.sequence(column)
                     && !SequenceProjectionRule.sequenceReference(
@@ -593,10 +600,10 @@ final class ScalarLoweringRule {
             throws TranslationException {
         if (!(binary instanceof Addition || binary instanceof Subtraction)) return;
         Expression left = binary.getLeftExpression(), right = binary.getRightExpression();
-        if (knownDate(left) && dayNumber(right)) {
+        if (knownDate(left, change) && dayNumber(right)) {
             binary.setRightExpression(new Function("orafit.days_interval", right));
             change.changed = true;
-        } else if (binary instanceof Addition && dayNumber(left) && knownDate(right)) {
+        } else if (binary instanceof Addition && dayNumber(left) && knownDate(right, change)) {
             binary.setLeftExpression(new Function("orafit.days_interval", left));
             change.changed = true;
         }

@@ -27,6 +27,17 @@ final class ReleaseCorpusTest {
     // The historical corpus is immutable; these cases now intentionally require SQL rewriting.
     private static final Set<Integer> INTENTIONAL_REWRITES = Set.of(110, 318, 462);
 
+    // Historical SUPPORTED rows that later releases deliberately reject (PIVOT/UNPIVOT, multi-table
+    // INSERT, LISTAGG DISTINCT ORDER, ROWNUM with ORDER BY, CONNECT BY state, TIMESTAMP WITH TIME
+    // ZONE, a stacked second statement). The set is a ceiling: a row outside it that stops being
+    // supported is a lost-support regression and fails this test.
+    private static final Set<Integer> KNOWN_MISSING_SUPPORT =
+            Set.of(
+                    19, 20, 21, 22, 50, 51, 52, 89, 145, 177, 192, 196, 198, 222, 224, 226, 227,
+                    228, 229, 231, 232, 233, 234, 235, 249, 250, 253, 254, 255, 256, 263, 264, 379,
+                    383, 384, 385, 396, 407, 414, 427, 429, 432, 433, 434, 435, 436, 437, 445, 446,
+                    448, 452, 455, 458, 503);
+
     @Test
     void historicalTranslatorCorpusStaysSafe() throws IOException {
         Path corpus = Path.of("src", "test", "resources", "regression", "release-corpus.tsv");
@@ -215,6 +226,16 @@ final class ReleaseCorpusTest {
             ids.computeIfAbsent(outcome, ignored -> new ArrayList<>()).add(id);
         }
 
+        /**
+         * Rows that were supported historically and are rejected now, beyond the known baseline.
+         */
+        private List<Integer> unexpectedMissingSupport() {
+            List<Integer> unexpected =
+                    new ArrayList<>(ids.getOrDefault(Outcome.MISSING_SUPPORT, List.of()));
+            unexpected.removeAll(KNOWN_MISSING_SUPPORT);
+            return unexpected;
+        }
+
         private int count(Outcome outcome) {
             return counts.getOrDefault(outcome, 0);
         }
@@ -225,6 +246,7 @@ final class ReleaseCorpusTest {
 
         private boolean safe() {
             return count(Outcome.UNSAFE_ACCEPT) == 0
+                    && unexpectedMissingSupport().isEmpty()
                     && count(Outcome.UNSAFE_PASSTHROUGH) == 0
                     && count(Outcome.BIND_GAP) == 0
                     && count(Outcome.UNEXPECTED_REWRITE) == 0
@@ -257,6 +279,7 @@ final class ReleaseCorpusTest {
                     detail(Outcome.UNSAFE_ACCEPT),
                     detail(Outcome.UNSAFE_PASSTHROUGH),
                     detail(Outcome.BIND_GAP),
+                    "Release corpus unexpected MISSING_SUPPORT ids=" + unexpectedMissingSupport(),
                     "Release corpus INTERNAL_ERROR by code="
                             + codes.getOrDefault(Outcome.INTERNAL_ERROR, Map.of())
                             + " ids="

@@ -106,6 +106,8 @@ public final class SqlGate {
         String preprocessed = block.sql();
         if (!preprocessed.equals(lexical.sql())) lexical = lexical(preprocessed, true, true);
         String masked = lexical.masked();
+        if (block.statementCount() <= 1) rejectMultipleStatements(masked);
+        rejectLockWait(masked);
         EnumSet<Feature> features = EnumSet.noneOf(Feature.class);
 
         if (wordSequence(masked, "SELECT", "UNIQUE")) features.add(Feature.SELECT_UNIQUE);
@@ -119,6 +121,7 @@ public final class SqlGate {
             features.add(Feature.APPLY);
         if (containsFunction(masked, ORACLE_FUNCTIONS)
                 || word(masked, "SYSDATE")
+                || word(masked, "CURRENT_DATE")
                 || word(masked, "SYSTIMESTAMP")) features.add(Feature.ORACLE_FUNCTION);
         if (wordSequence(masked, "CONNECT", "BY")) features.add(Feature.CONNECT_BY);
         if (masked.contains("(+)")
@@ -153,6 +156,38 @@ public final class SqlGate {
                 !preprocessed.equals(sql) || lexical.changed(),
                 block.statementCount() > 1,
                 lexical.timestampLiteral());
+    }
+
+    /**
+     * Oracle JDBC executes one statement per call. pgJDBC would split and run every statement of a
+     * multi-statement string, and the parser would keep only the first, so both outcomes differ
+     * from Oracle's ORA-00933. PL/SQL blocks and DDL program units legitimately contain semicolons.
+     */
+    private static void rejectMultipleStatements(String masked) throws TranslationException {
+        if (firstWord(masked, "BEGIN")
+                || firstWord(masked, "DECLARE")
+                || firstWord(masked, "CREATE")) return;
+        int semicolon = topLevelSemicolon(masked, 0);
+        if (semicolon < 0) return;
+        for (int i = semicolon + 1; i < masked.length(); i++) {
+            if (!sqlWhitespace(masked.charAt(i)) && masked.charAt(i) != ';') {
+                throw new TranslationException(
+                        "MULTI_STATEMENT",
+                        "Only one SQL statement per execution is supported (Oracle ORA-00933)");
+            }
+        }
+    }
+
+    private static final Pattern FOR_UPDATE_WAIT =
+            Pattern.compile("\\bFOR\\s+UPDATE\\b[^;]*?\\bWAIT\\s+\\d", Pattern.CASE_INSENSITIVE);
+
+    /** PostgreSQL has no per-statement lock wait time, so WAIT n cannot keep Oracle's meaning. */
+    private static void rejectLockWait(String masked) throws TranslationException {
+        if (FOR_UPDATE_WAIT.matcher(masked).find()) {
+            throw new TranslationException(
+                    "FOR_UPDATE_WAIT",
+                    "FOR UPDATE WAIT n has no PostgreSQL equivalent; use NOWAIT or no WAIT clause");
+        }
     }
 
     private static boolean requiresStructuralParser(String masked) {

@@ -2,7 +2,11 @@ package io.github.orafit.jdbc;
 
 import io.github.orafit.translation.TranslationException;
 
+import java.sql.BatchUpdateException;
 import java.sql.SQLException;
+import java.sql.SQLTimeoutException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Central Oracle-facing SQLException adaptation for translation and delegated PostgreSQL errors.
@@ -43,35 +47,131 @@ final class JdbcErrors {
                             "42000",
                             1795,
                             failure);
+            case "MULTI_STATEMENT" ->
+                    new SQLException(
+                            "ORA-00933: SQL command not properly ended", "42000", 933, failure);
             case "PARSER" -> new SQLException(failure.getMessage(), "42000", failure);
             default -> new SQLException(failure.getMessage(), "0A000", failure);
         };
     }
 
+    private static final Pattern ORACLE_PREFIX =
+            Pattern.compile("^\\s*(?:ERROR:\\s*)?ORA-(\\d{5})");
+    private static final Pattern CONSTRAINT = Pattern.compile("constraint \"([^\"]+)\"");
+
     static SQLException fromDelegate(SQLException sql) {
+        SQLException mapped = adapt(sql);
+        if (mapped != sql && sql instanceof BatchUpdateException batch) {
+            // Keep the batch type and per-row update counts that callers catch on.
+            BatchUpdateException keep =
+                    new BatchUpdateException(
+                            mapped.getMessage(),
+                            mapped.getSQLState(),
+                            mapped.getErrorCode(),
+                            batch.getLargeUpdateCounts(),
+                            batch);
+            return keep;
+        }
+        return mapped;
+    }
+
+    private static SQLException adapt(SQLException sql) {
         if (sql.getErrorCode() != 0) return sql;
-        String message = sql.getMessage();
-        if ("23514".equals(sql.getSQLState())
-                && message != null
-                && message.contains("orafit_byte_length_")) {
-            return new SQLException("ORA-12899: value too large for column", "72000", 12899, sql);
-        }
-        if ("21000".equals(sql.getSQLState())
-                && message != null
-                && message.contains(
+        String message = sql.getMessage() == null ? "" : sql.getMessage();
+        String state = sql.getSQLState() == null ? "" : sql.getSQLState();
+        switch (state) {
+            case "23514":
+                if (message.contains("orafit_byte_length_")) {
+                    return new SQLException(
+                            "ORA-12899: value too large for column", "72000", 12899, sql);
+                }
+                return sql;
+            case "21000":
+                if (message.contains(
                         "more than one row returned by a subquery used as an expression")) {
-            return new SQLException(
-                    "ORA-01427: single-row subquery returns more than one row", "21000", 1427, sql);
+                    return new SQLException(
+                            "ORA-01427: single-row subquery returns more than one row",
+                            "21000",
+                            1427,
+                            sql);
+                }
+                break;
+            case "23505":
+                return new SQLException(
+                        "ORA-00001: unique constraint (" + constraint(message) + ") violated",
+                        "23000",
+                        1,
+                        sql);
+            case "23502":
+                return new SQLException(
+                        "ORA-01400: cannot insert NULL into (" + constraint(message) + ")",
+                        "23000",
+                        1400,
+                        sql);
+            case "23503":
+                // PostgreSQL words the child-side and parent-side violations differently.
+                return message.contains("is still referenced")
+                                || message.contains("update or delete on table")
+                        ? new SQLException(
+                                "ORA-02292: integrity constraint ("
+                                        + constraint(message)
+                                        + ") violated - child record found",
+                                "23000",
+                                2292,
+                                sql)
+                        : new SQLException(
+                                "ORA-02291: integrity constraint ("
+                                        + constraint(message)
+                                        + ") violated - parent key not found",
+                                "23000",
+                                2291,
+                                sql);
+            case "22001":
+                return new SQLException(
+                        "ORA-12899: value too large for column", "72000", 12899, sql);
+            case "40P01":
+                return new SQLException(
+                        "ORA-00060: deadlock detected while waiting for resource",
+                        "61000",
+                        60,
+                        sql);
+            case "55P03":
+                return message.contains("lock timeout")
+                        ? new SQLException(
+                                "ORA-30006: resource busy; acquire with WAIT timeout expired",
+                                "61000",
+                                30006,
+                                sql)
+                        : new SQLException(
+                                "ORA-00054: resource busy and acquire with NOWAIT specified or"
+                                        + " timeout expired",
+                                "61000",
+                                54,
+                                sql);
+            case "57014":
+                return new SQLTimeoutException(
+                        "ORA-01013: user requested cancel of current operation",
+                        "72000",
+                        1013,
+                        sql);
+            default:
+                break;
         }
-        if (message == null) return sql;
-        int marker = message.indexOf("ORA-");
-        if (marker < 0 || marker + 9 > message.length()) return sql;
-        int code = 0;
-        for (int i = marker + 4; i < marker + 9; i++) {
-            char character = message.charAt(i);
-            if (character < '0' || character > '9') return sql;
-            code = code * 10 + (character - '0');
+        // Only a message that is itself an ORA error counts. Data echoed in a PostgreSQL DETAIL
+        // line (for example a key value that happens to read "ORA-00060") must never be scraped.
+        Matcher oracle = ORACLE_PREFIX.matcher(message);
+        if (!oracle.find()) return sql;
+        return new SQLException(message, sql.getSQLState(), Integer.parseInt(oracle.group(1)), sql);
+    }
+
+    private static String constraint(String message) {
+        Matcher matcher = CONSTRAINT.matcher(message);
+        if (matcher.find()) return matcher.group(1);
+        int quote = message.indexOf("column \"");
+        if (quote >= 0) {
+            int close = message.indexOf('"', quote + 8);
+            if (close > quote) return message.substring(quote + 8, close);
         }
-        return new SQLException(message, sql.getSQLState(), code, sql);
+        return "?";
     }
 }

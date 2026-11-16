@@ -1,0 +1,37 @@
+version = 1
+feature = "statement-shape"
+
+[[case]]
+id = "statement-shape.multiple-statements"
+title = "A second statement in one execution is ORA-00933, never silently dropped or run"
+kind = "query"
+compare = "error"
+sql = """
+SELECT 1 AS value FROM dual; SELECT 2 AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "error"
+error_code = 933
+
+[case.orafit]
+mode = "same"
+code = "MULTI_STATEMENT"
+
+[[case]]
+id = "statement-shape.for-update-wait"
+title = "FOR UPDATE WAIT n has no PostgreSQL equivalent"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno FROM bs_emp WHERE empno = 1 FOR UPDATE WAIT 5
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "reject"
+stage = "translation"
+code = "FOR_UPDATE_WAIT"
+reason = "PostgreSQL cannot bound a single statement's lock wait; only NOWAIT and SKIP LOCKED translate."

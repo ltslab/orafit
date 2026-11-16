@@ -111,7 +111,7 @@ final class ProcedureRuntime {
                 }
             }
 
-            boolean hasResult = delegate.execute();
+            boolean hasResult = JdbcProxy.execute(delegate);
             if (signature.outputCount() > 0) {
                 if (!hasResult)
                     throw new SQLException(

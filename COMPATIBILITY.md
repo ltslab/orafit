@@ -301,8 +301,7 @@ A public Supported classification carries explicit canonical-case evidence in `s
 
 For implementation-level evidence and maintenance rules, see:
 
-- [`src/test/resources/oracle/scope.toml`](../src/test/resources/oracle/scope.toml)
-- [`compat/oracle/cases/`](../compat/oracle/cases/)
-- [Compatibility maintenance](../maintainers/compatibility.md)
-- [Validation](../maintainers/validation.md)
-- [Practical compatibility audit](../maintainers/compatibility-audit.md)
+- [`src/test/resources/oracle/scope.toml`](src/test/resources/oracle/scope.toml)
+- [`src/test/resources/oracle/cases/`](src/test/resources/oracle/cases/)
+- [`src/test/resources/oracle/incompatibility-decisions.md`](src/test/resources/oracle/incompatibility-decisions.md)
+- [`AGENTS.md`](AGENTS.md) (test contract and workflow)

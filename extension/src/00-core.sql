@@ -67,7 +67,7 @@ $$;
 CREATE FUNCTION orafit.sysdate()
 RETURNS timestamp(0) without time zone
 LANGUAGE sql STABLE PARALLEL SAFE
-AS $$ SELECT CAST(statement_timestamp() AS timestamp(0) without time zone) $$;
+AS $$ SELECT CAST(date_trunc('second', statement_timestamp()) AS timestamp(0) without time zone) $$;
 
 CREATE FUNCTION orafit.systimestamp()
 RETURNS timestamp with time zone

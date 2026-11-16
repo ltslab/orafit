@@ -94,7 +94,7 @@ final class FunctionCallRuntime {
             executed = false;
             returnValue = null;
             lastWasNull = false;
-            boolean hasResult = delegate.execute();
+            boolean hasResult = JdbcProxy.execute(delegate);
             if (!hasResult)
                 throw new SQLException(
                         "PostgreSQL function call did not return a result row", "HY000");

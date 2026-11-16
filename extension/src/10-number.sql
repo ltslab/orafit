@@ -1,6 +1,6 @@
 -- NUMBER conversion and numeric Oracle semantics.
 
-CREATE FUNCTION orafit.to_number(value text, nls_numeric_characters text)
+CREATE FUNCTION orafit._parse_number(value text, nls_numeric_characters text)
 RETURNS numeric
 LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
 AS $$
@@ -36,6 +36,14 @@ EXCEPTION
         RAISE EXCEPTION 'ORA-01722: invalid number' USING ERRCODE = '42000';
 END
 $$;
+
+-- The parsed text is then held to Oracle NUMBER: ORA-01426 at 1E126, zero below 1E-130, and 38
+-- significant digits.
+-- plpgsql resolves number_value (defined further down) when it runs, not when it is created.
+CREATE FUNCTION orafit.to_number(value text, nls_numeric_characters text)
+RETURNS numeric
+LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+AS $$ BEGIN RETURN orafit.number_value(orafit._parse_number(value, nls_numeric_characters)); END $$;
 
 CREATE FUNCTION orafit.to_number(value text)
 RETURNS numeric

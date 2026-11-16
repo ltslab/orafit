@@ -14,7 +14,10 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Statement;
+import java.util.Collections;
+import java.util.Map;
 import java.util.Objects;
+import java.util.WeakHashMap;
 
 /**
  * JDBC execution boundary that translates SQL before delegating ordinary JDBC work to pgJDBC.
@@ -23,7 +26,13 @@ import java.util.Objects;
  * procedure execution models live in their dedicated runtime adapters.
  */
 public final class JdbcRuntime {
+    private static final int CACHE_ENTRIES = 256;
+
     private final OrafitEngine engine;
+    // One cache per connection: the key is that connection's column-type resolver, which lives and
+    // dies with it, so a cached translation never outlives the schema knowledge it was built from.
+    private final Map<ColumnTypeResolver, TranslationCache> caches =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     /** Creates a runtime backed by the standard translation engine. */
     public JdbcRuntime() {
@@ -165,6 +174,12 @@ public final class JdbcRuntime {
     }
 
     private Translation translate(String sql, ColumnTypeResolver columnTypes) throws SQLException {
+        return caches.computeIfAbsent(columnTypes, key -> new TranslationCache(CACHE_ENTRIES))
+                .get(sql, text -> translateUncached(text, columnTypes));
+    }
+
+    private Translation translateUncached(String sql, ColumnTypeResolver columnTypes)
+            throws SQLException {
         try {
             return engine.translate(sql, columnTypes);
         } catch (TranslationException failure) {
