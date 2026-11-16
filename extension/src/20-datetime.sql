@@ -11,11 +11,12 @@ AS $$ SELECT orafit.divide(extract(epoch FROM ($1 - $2)), 86400) $$;
 CREATE FUNCTION orafit._pg_datetime_format(format text)
 RETURNS text
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
-AS $$ SELECT regexp_replace($1, 'FF[1-9]?', 'US', 'gi') $$;
+-- FF3 and FF6 are the only fractional-second elements the Java gate admits; PostgreSQL 13+ owns both.
+AS $$ SELECT $1 $$;
 
 CREATE FUNCTION orafit.to_date(value text, format text DEFAULT 'YYYY-MM-DD')
 RETURNS timestamp without time zone
-LANGUAGE plpgsql VOLATILE PARALLEL SAFE
+LANGUAGE plpgsql STABLE PARALLEL SAFE
 AS $$
 DECLARE
     parsed timestamp without time zone;
@@ -114,13 +115,48 @@ $$;
 CREATE FUNCTION orafit.to_timestamp(
     value text, format text DEFAULT 'YYYY-MM-DD HH24:MI:SS')
 RETURNS timestamp without time zone
-LANGUAGE plpgsql VOLATILE PARALLEL SAFE
+LANGUAGE plpgsql STABLE PARALLEL SAFE
 AS $$
+DECLARE
+    parsed timestamp without time zone;
+    pg_format text;
+    rest text;
+    token text;
+    pattern text := '^[[:space:]]*';
+    consumed text;
+    digits integer;
 BEGIN
     IF value IS NULL OR btrim(value) = '' THEN RETURN NULL; END IF;
-    RETURN pg_catalog.to_timestamp(
-        btrim(value), orafit._pg_datetime_format(format))::timestamp without time zone;
+    pg_format := orafit._pg_datetime_format(format);
+    parsed := pg_catalog.to_timestamp(btrim(value), pg_format)::timestamp without time zone;
+    -- PostgreSQL silently ignores trailing input; Oracle raises ORA-01830. Track the input the
+    -- numeric tokens consume, exactly as TO_DATE does.
+    rest := regexp_replace(upper(format), '^FX', '');
+    WHILE rest <> '' LOOP
+        token := substring(rest FROM '^(YYYY|HH24|HH12|MM|DD|MI|SS|FF[36])');
+        IF token IS NOT NULL THEN
+            digits := CASE WHEN token = 'YYYY' THEN 4 WHEN left(token, 2) = 'FF' THEN 6 ELSE 2 END;
+            rest := substr(rest, length(token) + 1);
+            IF rest ~ '^[A-Z]' THEN
+                pattern := pattern || '[0-9]{' || digits || '}';
+            ELSE
+                pattern := pattern || '[0-9]{1,' || digits || '}';
+            END IF;
+        ELSIF left(rest, 1) !~ '[[:alnum:]]' THEN
+            pattern := pattern || '[^[:alnum:]]*';
+            rest := substr(rest, 2);
+        ELSE
+            RAISE EXCEPTION 'Orafit: unsupported TO_TIMESTAMP format token' USING ERRCODE = '0A000';
+        END IF;
+    END LOOP;
+    consumed := substring(btrim(value) FROM pattern);
+    IF consumed IS NULL OR btrim(substr(btrim(value), length(consumed) + 1)) <> '' THEN
+        RAISE EXCEPTION 'ORA-01830: date format picture ends before converting entire input string' USING ERRCODE = 'P1830';
+    END IF;
+    RETURN parsed;
 EXCEPTION
+    WHEN SQLSTATE 'P1830' THEN
+        RAISE EXCEPTION 'ORA-01830: date format picture ends before converting entire input string' USING ERRCODE = '22008';
     WHEN datetime_field_overflow OR invalid_datetime_format OR invalid_parameter_value THEN
         RAISE EXCEPTION 'ORA-01861: literal does not match format string' USING ERRCODE = '22008';
 END

@@ -20,8 +20,9 @@ final class OrafitTimeoutReproducerTest {
                 fail("the statement must be cancelled by the timeout");
             } catch (SQLException failure) {
                 assertTrue(
-                        failure.getMessage().contains("canceling statement"),
-                        () -> "unexpected timeout error: " + failure.getMessage());
+                        failure instanceof java.sql.SQLTimeoutException
+                                && failure.getErrorCode() == 1013,
+                        () -> "unexpected timeout error: " + failure);
             }
         }
     }

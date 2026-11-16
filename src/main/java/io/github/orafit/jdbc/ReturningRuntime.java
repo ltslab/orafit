@@ -145,6 +145,12 @@ final class ReturningRuntime {
         }
 
         private Object executeReturning(String methodName) throws SQLException {
+            // A second RETURNING row is only visible after the DML ran, so the statement must be
+            // undone as a unit, exactly as Oracle rolls back the failed statement.
+            return JdbcProxy.atomically(delegate.getConnection(), () -> runReturning(methodName));
+        }
+
+        private Object runReturning(String methodName) throws SQLException {
             for (ReturningPlan.Output output : returning.outputs()) {
                 if (!registered.contains(output.parameterIndex())) {
                     throw JdbcProxy.badIndex(
@@ -155,7 +161,7 @@ final class ReturningRuntime {
             lastOutputWasNull = false;
             updateCount = -1;
             int rows = 0;
-            boolean hasResult = delegate.execute();
+            boolean hasResult = JdbcProxy.execute(delegate);
             if (hasResult) {
                 try (ResultSet result = delegate.getResultSet()) {
                     if (result != null && result.next()) {

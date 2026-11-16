@@ -287,6 +287,10 @@ public final class JdbcRuntimeTest {
     }
 
     private static Object defaultValue(Class<?> type) {
+        if (type == Connection.class) {
+            // A real statement always has an owning connection; statement-atomic execution uses it.
+            return proxy(Connection.class, (p, m, a) -> defaultValue(m.getReturnType()));
+        }
         if (!type.isPrimitive() || type == void.class) return null;
         if (type == boolean.class) return false;
         if (type == char.class) return '\0';

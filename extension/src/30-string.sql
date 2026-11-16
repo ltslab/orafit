@@ -173,9 +173,7 @@ BEGIN
        OR start_position IS NULL OR occurrence IS NULL THEN RETURN NULL; END IF;
     p := trunc(start_position);
     wanted := trunc(occurrence);
-    IF p = 0 THEN
-        RAISE EXCEPTION 'ORA-01428: argument ''0'' is out of range' USING ERRCODE = '72000';
-    END IF;
+    IF p = 0 THEN RETURN 0; END IF;
     IF wanted < 1 THEN
         RAISE EXCEPTION 'ORA-01428: occurrence must be positive' USING ERRCODE = '72000';
     END IF;
@@ -260,6 +258,12 @@ DECLARE
 BEGIN
     IF value IS NULL OR value = '' OR target_length IS NULL OR fill IS NULL OR fill = '' THEN
         RETURN NULL;
+    END IF;
+    -- Oracle pads by display width, so a full-width character counts as two columns. PostgreSQL
+    -- counts characters; only the Latin range, where both agree, is supported.
+    IF value ~ ('[^' || chr(1) || '-' || chr(767) || ']') OR fill ~ ('[^' || chr(1) || '-' || chr(767) || ']') THEN
+        RAISE EXCEPTION 'Orafit: LPAD/RPAD of characters outside the Latin range needs Oracle display-width semantics'
+            USING ERRCODE = '0A000';
     END IF;
     requested := pg_catalog.trunc(target_length)::integer;
     IF left_side THEN

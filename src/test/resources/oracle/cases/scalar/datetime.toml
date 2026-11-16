@@ -1081,3 +1081,70 @@ error_code = 1841
 
 [case.orafit]
 mode = "same"
+
+[[case]]
+id = "datetime.to-timestamp-trailing-input"
+title = "TO_TIMESTAMP rejects trailing data beyond the format"
+kind = "query"
+compare = "error"
+sql = """
+SELECT TO_TIMESTAMP('2024-01-15 10:20:30xyz', 'YYYY-MM-DD HH24:MI:SS') AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "error"
+error_code = 1830
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "datetime.to-date-omitted-year-month"
+title = "TO_DATE fills omitted year and month from the session date, so it fails closed"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TO_DATE('12:30', 'HH24:MI') AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "reject"
+stage = "translation"
+code = "FUNCTION_TO_DATE_FORMAT"
+reason = "Oracle defaults the omitted year and month to the current ones; PostgreSQL uses year 1 and January."
+
+[[case]]
+id = "datetime.to-date-two-digit-year"
+title = "TO_DATE YY uses Oracle's current-century rule, so it fails closed"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TO_DATE('99-01-01', 'YY-MM-DD') AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "reject"
+stage = "translation"
+code = "FUNCTION_TO_DATE_FORMAT"
+reason = "Oracle YY resolves to the current century (2099); PostgreSQL applies a 1970 pivot (1999)."
+
+[[case]]
+id = "datetime.current-date-shape"
+title = "CURRENT_DATE is a DATE with a time of day"
+kind = "query"
+compare = "shape"
+sql = """
+SELECT CURRENT_DATE AS now_value FROM dual
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"

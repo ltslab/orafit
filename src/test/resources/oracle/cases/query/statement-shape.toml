@@ -1,0 +1,19 @@
+version = 1
+feature = "statement-shape"
+
+[[case]]
+id = "statement-shape.multiple-statements"
+title = "A second statement in one execution is ORA-00933, never silently dropped or run"
+kind = "query"
+compare = "error"
+sql = """
+SELECT 1 AS value FROM dual; SELECT 2 AS value FROM dual
+"""
+
+[case.oracle]
+outcome = "error"
+error_code = 933
+
+[case.orafit]
+mode = "same"
+code = "MULTI_STATEMENT"

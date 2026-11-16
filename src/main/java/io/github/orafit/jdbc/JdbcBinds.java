@@ -25,7 +25,13 @@ final class JdbcBinds {
             throws Throwable {
         List<Integer> outputs = outputs(binds, input);
         if (emptyCharacterBind(method, args)) {
-            int type = method.getName().equals("setNString") ? Types.NVARCHAR : Types.VARCHAR;
+            int type =
+                    method.getName().equals("setNString")
+                                    || args.length > 2
+                                            && args[2] instanceof Integer sql
+                                            && (sql == Types.NVARCHAR || sql == Types.NCHAR)
+                            ? Types.NVARCHAR
+                            : Types.VARCHAR;
             for (int output : outputs) delegate.setNull(output, type);
             return;
         }
@@ -78,11 +84,18 @@ final class JdbcBinds {
 
     private static boolean emptyCharacterBind(Method method, Object[] args) {
         String name = method.getName();
-        return (name.equals("setString") || name.equals("setNString"))
-                && args != null
-                && args.length > 1
-                && args[1] instanceof String value
-                && value.isEmpty();
+        if (args == null
+                || args.length < 2
+                || !(args[1] instanceof String value)
+                || !value.isEmpty()) {
+            return false;
+        }
+        if (name.equals("setString") || name.equals("setNString")) return true;
+        // setObject(i, "") and setObject(i, "", type) bind the same Oracle zero-length string,
+        // which is NULL, unless the caller asked for a non-character SQL type.
+        return name.equals("setObject")
+                && (args.length == 2
+                        || args[2] instanceof Integer type && bindTypeWidth(type) == 32);
     }
 
     private static List<Integer> outputs(BindLineage binds, int input) throws SQLException {
