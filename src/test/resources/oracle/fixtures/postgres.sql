@@ -6,6 +6,8 @@ DROP SCHEMA IF EXISTS bs_pkg CASCADE;
 -- @statement
 DROP TABLE IF EXISTS bs_events CASCADE;
 -- @statement
+DROP TABLE IF EXISTS bs_checked CASCADE;
+-- @statement
 DROP TABLE IF EXISTS bs_byte_length CASCADE;
 -- @statement
 DROP TABLE IF EXISTS bs_char_width CASCADE;
@@ -187,6 +189,13 @@ CREATE TABLE bs_events (
 );
 -- @statement
 INSERT INTO bs_events VALUES (1, 10), (2, 20), (3, 15);
+
+-- @statement
+CREATE TABLE bs_checked (
+    id  numeric(4) PRIMARY KEY,
+    qty numeric(3),
+    CONSTRAINT bs_checked_qty CHECK (qty >= 0)
+);
 
 -- @statement
 CREATE TABLE bs_byte_length (

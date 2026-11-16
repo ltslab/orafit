@@ -24,6 +24,16 @@ final class JdbcBinds {
             String duplicateContext)
             throws Throwable {
         List<Integer> outputs = outputs(binds, input);
+        // Oracle has no BOOLEAN bind: the Oracle driver sends it as NUMBER 1 or 0.
+        if (booleanBind(method, args)) {
+            int value = (Boolean) args[1] ? 1 : 0;
+            for (int output : outputs) delegate.setInt(output, value);
+            return;
+        }
+        if (booleanNull(method, args)) {
+            for (int output : outputs) delegate.setNull(output, Types.INTEGER);
+            return;
+        }
         if (emptyCharacterBind(method, args)) {
             int type =
                     method.getName().equals("setNString")
@@ -62,7 +72,8 @@ final class JdbcBinds {
     static int bindWidth(Method method, Object[] args) {
         return switch (method.getName()) {
             case "setString", "setNString" -> 32;
-            case "setBigDecimal",
+            case "setBoolean",
+                    "setBigDecimal",
                     "setByte",
                     "setShort",
                     "setInt",
@@ -77,9 +88,35 @@ final class JdbcBinds {
                             ? bindTypeWidth(type)
                             : args.length > 1 && args[1] instanceof String
                                     ? 32
-                                    : args.length > 1 && args[1] instanceof Number ? 40 : 0;
+                                    : args.length > 1
+                                                    && (args[1] instanceof Number
+                                                            || args[1] instanceof Boolean)
+                                            ? 40
+                                            : 0;
             default -> 0;
         };
+    }
+
+    private static boolean booleanType(int type) {
+        return type == Types.BOOLEAN || type == Types.BIT;
+    }
+
+    private static boolean booleanBind(Method method, Object[] args) {
+        if (args == null || args.length < 2 || !(args[1] instanceof Boolean)) return false;
+        return switch (method.getName()) {
+            case "setBoolean" -> true;
+            case "setObject" ->
+                    args.length == 2 || args[2] instanceof Integer type && booleanType(type);
+            default -> false;
+        };
+    }
+
+    private static boolean booleanNull(Method method, Object[] args) {
+        return method.getName().equals("setNull")
+                && args != null
+                && args.length > 1
+                && args[1] instanceof Integer type
+                && booleanType(type);
     }
 
     private static boolean emptyCharacterBind(Method method, Object[] args) {
@@ -117,7 +154,9 @@ final class JdbcBinds {
                     Types.NVARCHAR,
                     Types.LONGNVARCHAR ->
                     32;
-            case Types.TINYINT,
+            case Types.BOOLEAN,
+                    Types.BIT,
+                    Types.TINYINT,
                     Types.SMALLINT,
                     Types.INTEGER,
                     Types.BIGINT,

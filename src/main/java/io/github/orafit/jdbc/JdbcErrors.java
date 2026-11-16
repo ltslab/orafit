@@ -85,7 +85,29 @@ final class JdbcErrors {
                     return new SQLException(
                             "ORA-12899: value too large for column", "72000", 12899, sql);
                 }
-                return sql;
+                return new SQLException(
+                        "ORA-02290: check constraint (" + constraint(message) + ") violated",
+                        "23000",
+                        2290,
+                        sql);
+            case "42P01":
+                return new SQLException(
+                        "ORA-00942: table or view does not exist", "42000", 942, sql);
+            case "42703":
+                return new SQLException("ORA-00904: invalid identifier", "42000", 904, sql);
+            case "42702":
+                return new SQLException("ORA-00918: column ambiguously defined", "42000", 918, sql);
+            case "22003":
+                // Only the column precision check; Orafit's own range errors carry an ORA prefix.
+                if (message.contains("numeric field overflow")) {
+                    return new SQLException(
+                            "ORA-01438: value larger than specified precision allowed for this"
+                                    + " column",
+                            "22003",
+                            1438,
+                            sql);
+                }
+                break;
             case "21000":
                 if (message.contains(
                         "more than one row returned by a subquery used as an expression")) {

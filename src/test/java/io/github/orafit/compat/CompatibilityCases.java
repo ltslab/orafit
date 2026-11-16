@@ -171,8 +171,17 @@ public final class CompatibilityCases {
                             compareTypeName,
                             sql,
                             observeSql,
-                            binds));
+                            binds,
+                            optionalStrings(table, "generated_keys")));
         }
+    }
+
+    private static List<String> optionalStrings(TomlTable table, String key) {
+        TomlArray array = table.getArray(key);
+        if (array == null) return List.of();
+        List<String> values = new java.util.ArrayList<>();
+        for (int i = 0; i < array.size(); i++) values.add(array.getString(i));
+        return List.copyOf(values);
     }
 
     private static List<CompatibilityCase.Bind> parseBinds(TomlTable table, String id) {

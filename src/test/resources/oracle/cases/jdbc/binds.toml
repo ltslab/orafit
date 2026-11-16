@@ -196,3 +196,279 @@ index = 1
 type = "VARCHAR"
 mode = "in"
 value = "SORT_VALUE"
+
+[[case]]
+id = "bind.is-null-varchar-null"
+title = "Bare bind IS NULL with a NULL VARCHAR bind"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT 1 AS value FROM dual WHERE ? IS NULL
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case.bind]]
+index = 1
+type = "VARCHAR"
+mode = "in"
+null = true
+
+[[case]]
+id = "bind.is-not-null-varchar-value"
+title = "Bare bind IS NOT NULL with a non-NULL VARCHAR bind"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT 1 AS value FROM dual WHERE ? IS NOT NULL
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case.bind]]
+index = 1
+type = "VARCHAR"
+mode = "in"
+value = "abc"
+
+[[case]]
+id = "bind.is-null-varchar-empty"
+title = "Bare bind IS NULL with an empty VARCHAR bind"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT 1 AS value FROM dual WHERE ? IS NULL
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case.bind]]
+index = 1
+type = "VARCHAR"
+mode = "in"
+value = ""
+
+[[case]]
+id = "bind.boolean-true-number"
+title = "setBoolean(true) binds NUMBER 1"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT 1 AS value FROM dual WHERE ? + 1 = 2
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case.bind]]
+index = 1
+type = "BOOLEAN"
+mode = "in"
+value = "true"
+
+[[case]]
+id = "bind.boolean-false-number"
+title = "setBoolean(false) binds NUMBER 0"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT 1 AS value FROM dual WHERE ? + 1 = 1
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case.bind]]
+index = 1
+type = "BOOLEAN"
+mode = "in"
+value = "false"
+
+[[case]]
+id = "bind.boolean-where-equals"
+title = "setBoolean(true) compares equal to the NUMBER 1"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT 1 AS value FROM dual WHERE ? = 1
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case.bind]]
+index = 1
+type = "BOOLEAN"
+mode = "in"
+value = "true"
+
+[[case]]
+id = "bind.boolean-null"
+title = "setNull(BOOLEAN) is a NULL"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT 1 AS value FROM dual WHERE ? IS NULL
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case.bind]]
+index = 1
+type = "BOOLEAN"
+mode = "in"
+null = true
+
+[[case]]
+id = "bind.colon-named"
+title = "Named placeholders bind by position of appearance"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT 1 AS value FROM dual WHERE :first_value = 1 AND :second_value = 2
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case.bind]]
+index = 1
+type = "INTEGER"
+mode = "in"
+value = "1"
+
+[[case.bind]]
+index = 2
+type = "INTEGER"
+mode = "in"
+value = "2"
+
+[[case]]
+id = "bind.colon-numbered-in-order"
+title = "Numbered placeholders in order"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT 1 AS value FROM dual WHERE :1 = 2 AND :2 = 3
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case.bind]]
+index = 1
+type = "INTEGER"
+mode = "in"
+value = "2"
+
+[[case.bind]]
+index = 2
+type = "INTEGER"
+mode = "in"
+value = "3"
+
+[[case]]
+id = "bind.colon-numbered-out-of-order"
+title = "Numbered placeholders bind by position, not by number"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT 1 AS value FROM dual WHERE :2 = 3 AND :1 = 2
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case.bind]]
+index = 1
+type = "INTEGER"
+mode = "in"
+value = "3"
+
+[[case.bind]]
+index = 2
+type = "INTEGER"
+mode = "in"
+value = "2"
+
+[[case]]
+id = "bind.colon-repeated-name"
+title = "A repeated name is a separate bind each time"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT 1 AS value FROM dual WHERE :a + :a = 4
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case.bind]]
+index = 1
+type = "INTEGER"
+mode = "in"
+value = "2"
+
+[[case.bind]]
+index = 2
+type = "INTEGER"
+mode = "in"
+value = "2"
+
+[[case]]
+id = "bind.colon-in-literal"
+title = "A colon inside a string literal is not a bind"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT 1 AS value FROM dual WHERE 'x:y' = 'x:y' AND :a = 1
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case.bind]]
+index = 1
+type = "INTEGER"
+mode = "in"
+value = "1"

@@ -64,6 +64,21 @@ SELECT CASE
 END
 $$;
 
+-- A missing sequence is ORA-02289; the bare regclass cast would raise the same PostgreSQL error
+-- as a missing table, which Oracle reports as ORA-00942.
+CREATE FUNCTION orafit.sequence(name text)
+RETURNS regclass LANGUAGE plpgsql STABLE STRICT PARALLEL SAFE
+AS $$
+DECLARE
+    target regclass := pg_catalog.to_regclass(name);
+BEGIN
+    IF target IS NULL THEN
+        RAISE EXCEPTION 'ORA-02289: sequence does not exist' USING ERRCODE = '42000';
+    END IF;
+    RETURN target;
+END
+$$;
+
 CREATE FUNCTION orafit.sysdate()
 RETURNS timestamp(0) without time zone
 LANGUAGE sql STABLE PARALLEL SAFE

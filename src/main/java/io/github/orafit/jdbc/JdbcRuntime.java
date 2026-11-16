@@ -88,6 +88,7 @@ public final class JdbcRuntime {
                 }
                 Object[] mapped = args.clone();
                 mapped[0] = translated.sql();
+                oracleColumnNames(mapped);
                 PreparedStatement prepared =
                         (PreparedStatement) JdbcProxy.invokeDelegate(method, delegate, mapped);
                 return PreparedRuntime.wrap(prepared, translated, (Connection) proxy);
@@ -159,6 +160,7 @@ public final class JdbcRuntime {
                 metadata = translated.metadata();
                 Object[] mapped = args.clone();
                 mapped[0] = translated.sql();
+                oracleColumnNames(mapped);
                 return JdbcMetadata.oracleResult(
                         JdbcProxy.invokeDelegate(method, delegate, mapped),
                         metadata,
@@ -198,6 +200,24 @@ public final class JdbcRuntime {
             throw new SQLFeatureNotSupportedException(
                     "Oracle routine calls require Connection.prepareCall()", "0A000");
         }
+    }
+
+    /**
+     * Oracle names generated-key columns the way its catalog stores unquoted identifiers, in upper
+     * case ({@code new String[] {"ID"}}). Orafit's PostgreSQL tables keep them in lower case, and
+     * pgJDBC quotes the names it is given, so an all-upper-case name is folded back. A name with
+     * lower-case letters is a quoted Oracle identifier and is passed through unchanged.
+     */
+    private static void oracleColumnNames(Object[] args) {
+        if (args.length != 2 || !(args[1] instanceof String[] names)) return;
+        String[] folded = names.clone();
+        for (int i = 0; i < folded.length; i++) {
+            String name = folded[i];
+            if (name != null && name.equals(name.toUpperCase(java.util.Locale.ROOT))) {
+                folded[i] = name.toLowerCase(java.util.Locale.ROOT);
+            }
+        }
+        args[1] = folded;
     }
 
     private static boolean sqlMethod(Method method, Object[] args) {

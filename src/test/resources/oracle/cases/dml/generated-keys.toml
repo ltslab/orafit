@@ -1,0 +1,59 @@
+version = 1
+feature = "generated-keys"
+
+[[case]]
+id = "generated-keys.upper-column"
+title = "A requested upper-case column is returned"
+kind = "update"
+compare = "update"
+generated_keys = ["ID"]
+sql = """
+INSERT INTO bs_dml(id, code) VALUES (50, 'K')
+"""
+observe_sql = """
+SELECT id, code FROM bs_dml ORDER BY id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "generated-keys.two-columns"
+title = "Several requested columns keep their order and labels"
+kind = "update"
+compare = "update"
+generated_keys = ["CODE", "ID"]
+sql = """
+INSERT INTO bs_dml(id, code) VALUES (51, 'L')
+"""
+observe_sql = """
+SELECT id, code FROM bs_dml ORDER BY id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "generated-keys.update-statement"
+title = "A requested column is returned for an UPDATE"
+kind = "update"
+compare = "update"
+generated_keys = ["ID"]
+sql = """
+UPDATE bs_dml SET code = 'M' WHERE id = 1
+"""
+observe_sql = """
+SELECT id, code FROM bs_dml ORDER BY id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"

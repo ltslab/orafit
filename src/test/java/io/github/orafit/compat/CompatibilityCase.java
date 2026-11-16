@@ -17,7 +17,8 @@ public record CompatibilityCase(
         boolean compareTypeName,
         String sql,
         String observeSql,
-        List<Bind> binds) {
+        List<Bind> binds,
+        List<String> generatedKeys) {
 
     public enum Kind {
         QUERY,
@@ -55,6 +56,7 @@ public record CompatibilityCase(
         VARCHAR,
         INTEGER,
         DECIMAL,
+        BOOLEAN,
         DATE,
         TIMESTAMP,
         TIMESTAMP_TZ,
