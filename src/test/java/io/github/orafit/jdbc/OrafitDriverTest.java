@@ -31,6 +31,8 @@ public final class OrafitDriverTest {
 
             Properties properties = new Properties();
             properties.setProperty("user", "app");
+            // The fake server has no catalog to answer the collation query with.
+            properties.setProperty("orafit.collation", "ignore");
             Connection connection =
                     driver.connect("jdbc:orafit://db:5432/app?sslmode=require", properties);
             equal("jdbc:postgresql://db:5432/app?sslmode=require", delegate.url, "delegate URL");
@@ -59,6 +61,7 @@ public final class OrafitDriverTest {
             Properties nativeTransactions = new Properties();
             nativeTransactions.setProperty("autosave", "never");
             nativeTransactions.setProperty("cleanupSavepoints", "false");
+            nativeTransactions.setProperty("orafit.collation", "ignore");
             driver.connect("jdbc:orafit://db:5432/app", nativeTransactions);
             equal(
                     "never",

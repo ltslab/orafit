@@ -149,6 +149,15 @@ final class OracleFunctionRule {
                         case "TO_NUMBER" -> checked(function, name, 1, 1, "to_number");
                         case "CEIL" ->
                                 coerced(function, name, 1, 1, "ceil", OracleCoercion.Kind.NUMBER);
+                        case "BITAND" ->
+                                coerced(
+                                        function,
+                                        name,
+                                        2,
+                                        2,
+                                        "bitand",
+                                        OracleCoercion.Kind.NUMBER,
+                                        OracleCoercion.Kind.NUMBER);
                         case "MOD" ->
                                 coerced(
                                         function,
@@ -293,6 +302,23 @@ final class OracleFunctionRule {
         return helper;
     }
 
+    private static boolean dateCandidate(Expression value) {
+        // A TIMESTAMP literal or cast stays rejected: Oracle derives the result precision from the
+        // format, which Orafit does not reproduce.
+        if (value instanceof net.sf.jsqlparser.expression.DateTimeLiteralExpression literal
+                && literal.getType()
+                        != net.sf.jsqlparser.expression.DateTimeLiteralExpression.DateTime.DATE)
+            return false;
+        if (value instanceof net.sf.jsqlparser.expression.CastExpression cast
+                && cast.getColDataType() != null
+                && cast.getColDataType().getDataType().toUpperCase().startsWith("TIMESTAMP"))
+            return false;
+        return !(value instanceof StringValue
+                || value instanceof net.sf.jsqlparser.expression.LongValue
+                || value instanceof net.sf.jsqlparser.expression.DoubleValue
+                || value instanceof net.sf.jsqlparser.expression.NullValue);
+    }
+
     private static String toChar(Function function) throws TranslationException {
         if (function.getParameters() != null && function.getParameters().size() == 2) {
             Expression value = function.getParameters().get(0);
@@ -301,7 +327,11 @@ final class OracleFunctionRule {
             if (numericToCharValue(value)
                     && format instanceof StringValue literal
                     && numericFormat(literal.getValue())) return "to_char_number_format";
-            if (value instanceof Column) return formatted(function, "TO_CHAR", "to_char_format");
+            // A column, a bind or a date expression over them is a date or not by its type, which
+            // only the database knows: the runtime has a date overload and no other, so anything
+            // that is not a date fails there instead of printing something.
+            if (value instanceof Column || dateCandidate(value))
+                return formatted(function, "TO_CHAR", "to_char_format");
             throw new TranslationException(
                     "FUNCTION_TO_CHAR_TYPE",
                     "TO_CHAR explicit format requires a known DATE or bounded numeric value");

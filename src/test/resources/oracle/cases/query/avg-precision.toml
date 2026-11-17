@@ -1,0 +1,80 @@
+version = 1
+feature = "avg-number-precision"
+
+[[case]]
+id = "aggregate.avg-repeating-fraction"
+title = "AVG keeps the digits of NUMBER division"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT deptno, AVG(sal) AS value FROM bs_emp GROUP BY deptno ORDER BY deptno
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "aggregate.avg-equals-sum-over-count"
+title = "AVG equals SUM divided by COUNT"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT deptno FROM bs_emp GROUP BY deptno HAVING AVG(sal) = SUM(sal) / COUNT(sal) ORDER BY deptno
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "aggregate.avg-skips-null"
+title = "AVG skips NULL values"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT AVG(mgr) AS value FROM bs_emp
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "aggregate.avg-no-rows"
+title = "AVG over no rows is NULL"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT AVG(sal) AS value FROM bs_emp WHERE empno < 0
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "aggregate.avg-distinct"
+title = "AVG(DISTINCT) averages each value once"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT AVG(DISTINCT deptno) AS value FROM bs_emp
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "aggregate.avg-analytic"
+title = "Analytic AVG keeps the digits of NUMBER division"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno, AVG(sal) OVER (PARTITION BY deptno) AS value FROM bs_emp ORDER BY empno
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"

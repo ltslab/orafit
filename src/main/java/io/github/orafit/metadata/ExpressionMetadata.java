@@ -4,6 +4,7 @@ import io.github.orafit.translation.ResultMetadataPlan.Column;
 import io.github.orafit.translation.ResultMetadataPlan.Kind;
 
 import net.sf.jsqlparser.expression.AnalyticExpression;
+import net.sf.jsqlparser.expression.BinaryExpression;
 import net.sf.jsqlparser.expression.CaseExpression;
 import net.sf.jsqlparser.expression.CastExpression;
 import net.sf.jsqlparser.expression.ConnectByRootOperator;
@@ -78,6 +79,10 @@ final class ExpressionMetadata {
                                                         c.getUnquotedColumnName()
                                                                 .toUpperCase(Locale.ROOT))))
             return number(0);
+        if ((expression instanceof Addition || expression instanceof Subtraction)
+                && bindOffset((BinaryExpression) expression))
+            // A date by its setter, or a number (scale 0, as Oracle reports it).
+            return new Column(null, Kind.DATE_OR_NUMBER, 0, 0);
         if (expression instanceof Addition
                 || expression instanceof Subtraction
                 || expression instanceof Multiplication
@@ -179,11 +184,18 @@ final class ExpressionMetadata {
         if (name.equals("REGEXP_REPLACE"))
             return meta(Kind.VARCHAR2, regexpReplaceWidth(function), 0);
         if (name.equals("TRUNC") || name.equals("ROUND")) {
+            // A bind is a DATE or a NUMBER by the setter that fills it, which only the execution
+            // knows; the type of the result says which.
+            if (firstExpression(function) instanceof JdbcNamedParameter)
+                return meta(Kind.DATE_OR_NUMBER, null, null);
             Column first = first(function);
             return first.kind() == Kind.DATE || first.kind() == Kind.TIMESTAMP
                     ? meta(Kind.DATE, 7, 0)
                     : number(-127);
         }
+        // BITAND of literals is an unconstrained NUMBER; with a column, a bind or a NULL it has
+        // scale 0 (checked against Oracle 18c XE).
+        if (name.equals("BITAND")) return number(allLiterals(function) ? -127 : 0);
         if (List.of(
                         "TO_NUMBER",
                         "MONTHS_BETWEEN",
@@ -340,6 +352,32 @@ final class ExpressionMetadata {
                 || type(value.getElseExpression()).kind() == Kind.NUMBER;
     }
 
+    private static boolean bindOffset(BinaryExpression binary) {
+        Expression left = binary.getLeftExpression(), right = binary.getRightExpression();
+        boolean leftBind = left instanceof JdbcNamedParameter;
+        boolean rightBind = right instanceof JdbcNamedParameter;
+        return (leftBind && (rightBind || numberLiteral(right)))
+                || (binary instanceof Addition && rightBind && numberLiteral(left));
+    }
+
+    private static boolean numberLiteral(Expression value) {
+        Expression plain =
+                value instanceof SignedExpression signed ? signed.getExpression() : value;
+        return plain instanceof LongValue || plain instanceof DoubleValue;
+    }
+
+    private static boolean allLiterals(Function function) {
+        if (function.getParameters() == null) return false;
+        for (Expression value : function.getParameters()) {
+            Expression plain =
+                    value instanceof SignedExpression signed ? signed.getExpression() : value;
+            if (!(plain instanceof LongValue
+                    || plain instanceof DoubleValue
+                    || plain instanceof StringValue)) return false;
+        }
+        return true;
+    }
+
     private static boolean hasBindOrNull(Function function) {
         if (function.getParameters() == null) return false;
         for (Expression value : function.getParameters())
@@ -349,7 +387,29 @@ final class ExpressionMetadata {
 
     private static Integer substrWidth(Function function) {
         if (function.getParameters() == null || function.getParameters().isEmpty()) return null;
-        Integer source = width(function.getParameters().get(0));
+        return substrWidth(function, width(function.getParameters().get(0)));
+    }
+
+    /** SUBSTR of a text of known width, such as a table column. */
+    static Column substr(Function function, int sourceWidth) {
+        return meta(Kind.VARCHAR2, substrWidth(function, sourceWidth), 0);
+    }
+
+    /** An Oracle DATE: a time of day to the second, 7 bytes. */
+    static Column date() {
+        return meta(Kind.DATE, 7, 0);
+    }
+
+    /** A CHAR(width). */
+    static Column fixedChar(int width) {
+        return meta(Kind.CHAR, width, 0);
+    }
+
+    static Column varchar2(int width) {
+        return meta(Kind.VARCHAR2, width, 0);
+    }
+
+    private static Integer substrWidth(Function function, Integer source) {
         if (source == null) return null;
         Long start =
                 integer(

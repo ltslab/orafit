@@ -112,6 +112,9 @@ public final class JdbcRuntime {
                         "0A000");
             }
 
+            if (name.equals("createClob") || name.equals("createNClob")) return JdbcLobs.newClob();
+            if (name.equals("createBlob")) return JdbcLobs.newBlob();
+
             if (name.equals("createStatement")) {
                 Statement statement = (Statement) JdbcProxy.invokeDelegate(method, delegate, args);
                 return JdbcProxy.proxy(

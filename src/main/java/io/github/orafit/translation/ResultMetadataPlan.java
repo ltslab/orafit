@@ -91,6 +91,11 @@ public record ResultMetadataPlan(List<Column> columns) {
         CHAR,
         VARCHAR2,
         DATE,
-        TIMESTAMP
+        TIMESTAMP,
+        /**
+         * A DATE or a NUMBER, told apart only by the type of the result: the value of a bind of
+         * either kind passes through the expression (TRUNC(?)).
+         */
+        DATE_OR_NUMBER
     }
 }

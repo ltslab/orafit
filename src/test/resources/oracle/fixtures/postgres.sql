@@ -4,6 +4,8 @@
 -- @statement
 DROP SCHEMA IF EXISTS bs_pkg CASCADE;
 -- @statement
+DROP TABLE IF EXISTS bs_ora2pg_dates CASCADE;
+-- @statement
 DROP TABLE IF EXISTS bs_events CASCADE;
 -- @statement
 DROP TABLE IF EXISTS bs_checked CASCADE;
@@ -189,6 +191,15 @@ CREATE TABLE bs_events (
 );
 -- @statement
 INSERT INTO bs_events VALUES (1, 10), (2, 20), (3, 15);
+
+-- @statement
+CREATE TABLE bs_ora2pg_dates (
+    id numeric(4) PRIMARY KEY,
+    d  timestamp(0),
+    d2 timestamp(0)
+);
+-- @statement
+INSERT INTO bs_ora2pg_dates VALUES (1, '2024-01-31 00:00:00', '2024-03-01 00:00:00'), (2, '2024-02-29 13:45:10', '2024-03-01 01:00:00');
 
 -- @statement
 CREATE TABLE bs_checked (

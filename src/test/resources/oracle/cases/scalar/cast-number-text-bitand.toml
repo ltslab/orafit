@@ -1,0 +1,251 @@
+version = 1
+feature = "cast-number-text-bitand"
+
+[[case]]
+id = "scalar.cast-number-column-varchar2"
+title = "CAST of a NUMBER column to VARCHAR2 drops trailing zeros"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno, CAST(sal AS VARCHAR2(20)) AS value FROM bs_emp ORDER BY empno
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.cast-fraction-varchar2"
+title = "CAST of a fraction to VARCHAR2 has no leading zero"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT CAST(0.5 AS VARCHAR2(10)) AS value FROM dual
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.cast-number-arithmetic-varchar2"
+title = "CAST of NUMBER arithmetic to VARCHAR2"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno, CAST(sal / 8 AS VARCHAR2(40)) AS value FROM bs_emp ORDER BY empno
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.cast-text-column-varchar2"
+title = "CAST of a text column to VARCHAR2 is unchanged"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno, CAST(ename AS VARCHAR2(10)) AS value FROM bs_emp ORDER BY empno
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.bitand-literals"
+title = "BITAND of two integers"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT BITAND(6, 3) AS value FROM dual
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.bitand-negative"
+title = "BITAND of a negative integer"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT BITAND(-1, 255) AS value FROM dual
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.bitand-column"
+title = "BITAND of a column"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno, BITAND(empno, 3) AS value FROM bs_emp ORDER BY empno
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.bitand-null"
+title = "BITAND with a NULL is NULL"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT BITAND(6, NULL) AS value FROM dual
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.cast-negative-fraction-varchar2"
+title = "CAST of a negative fraction to VARCHAR2"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT CAST(-0.5 AS VARCHAR2(5)) AS value FROM dual
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.cast-zero-varchar2"
+title = "CAST of zero to VARCHAR2"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT CAST(0 AS VARCHAR2(5)) AS value FROM dual
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.cast-small-varchar2"
+title = "CAST of a tiny number to VARCHAR2 is positional, not scientific"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT CAST(1E-10 AS VARCHAR2(20)) AS value FROM dual
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.cast-large-varchar2"
+title = "CAST of a large number to VARCHAR2 is positional, not scientific"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT CAST(1E20 AS VARCHAR2(40)) AS value FROM dual
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.cast-null-number-varchar2"
+title = "CAST of a NULL NUMBER to VARCHAR2"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT CAST(CAST(NULL AS NUMBER) AS VARCHAR2(5)) AS value FROM dual
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.bitand-fraction"
+title = "BITAND truncates a fraction toward zero"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT BITAND(6.5, 3) AS a, BITAND(-6.5, 3) AS b, BITAND(6, 3.9) AS c FROM dual
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.bitand-both-negative"
+title = "BITAND of two negative integers"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT BITAND(-1, -1) AS value FROM dual
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.bitand-large"
+title = "BITAND beyond 32 bits"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT BITAND(1099511627776, 1099511627777) AS value FROM dual
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.bitand-string"
+title = "BITAND of a numeric string"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT BITAND('6', 3) AS value FROM dual
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.cast-number-varchar2-too-long"
+title = "CAST of a number longer than the VARCHAR2 is an error"
+kind = "query"
+compare = "error"
+sql = """
+SELECT CAST(12345 AS VARCHAR2(2)) AS value FROM dual
+"""
+[case.oracle]
+outcome = "error"
+error_code = 25137
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "scalar.cast-number-column-varchar2-too-long"
+title = "CAST of a NUMBER column longer than the VARCHAR2 is an error"
+kind = "query"
+compare = "error"
+sql = """
+SELECT CAST(sal AS VARCHAR2(1)) AS value FROM bs_emp
+"""
+[case.oracle]
+outcome = "error"
+error_code = 25137
+[case.orafit]
+mode = "same"

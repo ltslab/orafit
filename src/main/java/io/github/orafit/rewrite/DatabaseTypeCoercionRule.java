@@ -267,6 +267,60 @@ public final class DatabaseTypeCoercionRule {
         return value.length();
     }
 
+    /**
+     * What Oracle makes of a text operand's type: CHAR when it is fixed (a text literal is CHAR),
+     * VARCHAR2 otherwise, and how wide. {@code physical} says a table column is involved: a text
+     * literal alone is not evidence of the result type.
+     */
+    public record TextShape(boolean fixed, int width, boolean physical) {}
+
+    /** The kind of an expression in an UPDATE, where its target table is the only relation. */
+    public static ColumnTypeResolver.Kind expressionKind(
+            Expression value, Update update, ColumnTypeResolver resolver)
+            throws TranslationException {
+        if (update.getTable() == null) return ColumnTypeResolver.Kind.UNKNOWN;
+        try {
+            return kind(value, Scope.single(update.getTable(), resolver));
+        } catch (ResolutionFailure failure) {
+            throw failure.cause;
+        }
+    }
+
+    public static TextShape textShape(
+            Expression value, PlainSelect select, ColumnTypeResolver resolver)
+            throws TranslationException {
+        try {
+            return textShape(value, Scope.from(select, resolver));
+        } catch (ResolutionFailure failure) {
+            throw failure.cause;
+        }
+    }
+
+    private static TextShape textShape(Expression value, Scope scope) {
+        if (value instanceof StringValue literal) {
+            Integer width = literalWidth(literal);
+            return width == null ? null : new TextShape(true, width, false);
+        }
+        if (value instanceof net.sf.jsqlparser.expression.operators.arithmetic.Concat concat) {
+            TextShape left = textShape(concat.getLeftExpression(), scope);
+            TextShape right = textShape(concat.getRightExpression(), scope);
+            return left == null || right == null
+                    ? null
+                    : new TextShape(
+                            left.fixed() && right.fixed(),
+                            left.width() + right.width(),
+                            left.physical() || right.physical());
+        }
+        if (value instanceof Column column) {
+            Integer width = scope.width(column);
+            return width == null
+                    ? null
+                    : new TextShape(
+                            kind(column, scope) == ColumnTypeResolver.Kind.FIXED_CHAR, width, true);
+        }
+        return null;
+    }
+
     private static Integer charWidth(Expression value, Scope scope) {
         if (value instanceof Column column) return scope.width(column);
         if (value instanceof CastExpression cast && cast.getColDataType() != null) {
@@ -467,7 +521,10 @@ public final class DatabaseTypeCoercionRule {
         coercer.apply(update.getWhere());
         if (update.getUpdateSets() == null) return;
         for (UpdateSet set : update.getUpdateSets()) {
-            for (int i = 0; i < Math.min(set.getColumns().size(), set.getValues().size()); i++) {
+            // SET (a, b) = (SELECT ...) is one value for several columns: converting it would turn
+            // the sub-SELECT into a scalar and break the form.
+            if (set.getColumns().size() != set.getValues().size()) continue;
+            for (int i = 0; i < set.getColumns().size(); i++) {
                 Expression value = set.getValue(i);
                 coercer.apply(value);
                 if (scope.target(set.getColumn(i)) == ColumnTypeResolver.Kind.NUMBER
@@ -579,6 +636,11 @@ public final class DatabaseTypeCoercionRule {
         protected <S> Void visitBinaryExpression(BinaryExpression binary, S context) {
             super.visitBinaryExpression(binary, context);
             preserveFixedCharPaddingComparison(binary);
+            if (binary
+                    instanceof net.sf.jsqlparser.expression.operators.relational.LikeExpression) {
+                binary.setLeftExpression(paddedText(binary.getLeftExpression()));
+                binary.setRightExpression(paddedText(binary.getRightExpression()));
+            }
             if (scope.resolver == ColumnTypeResolver.NONE || !numericContext(binary)) return null;
             ColumnTypeResolver.Kind left = kind(binary.getLeftExpression(), scope);
             ColumnTypeResolver.Kind right = kind(binary.getRightExpression(), scope);
@@ -593,6 +655,16 @@ public final class DatabaseTypeCoercionRule {
                 change.changed = true;
             }
             return null;
+        }
+
+        /**
+         * A CHAR column keeps its trailing blanks as text in Oracle; PostgreSQL drops them when the
+         * value becomes text.
+         */
+        private Expression paddedText(Expression operand) {
+            if (kind(operand, scope) != ColumnTypeResolver.Kind.FIXED_CHAR) return operand;
+            change.changed = true;
+            return new Function("orafit.char_text", operand);
         }
 
         private void preserveFixedCharPaddingComparison(BinaryExpression binary) {
@@ -628,6 +700,14 @@ public final class DatabaseTypeCoercionRule {
         @Override
         public <S> Void visit(Function function, S context) {
             super.visit(function, context);
+            // The text conversion of an earlier rule (||, LPAD, RPAD, SUBSTR ...) strips the
+            // padding
+            // of a CHAR column; the padded text is what Oracle works on.
+            if ("orafit.to_varchar2".equalsIgnoreCase(function.getName())
+                    && function.getParameters() != null
+                    && !function.getParameters().isEmpty()) {
+                setValue(function.getParameters(), 0, paddedText(function.getParameters().get(0)));
+            }
             if ((OracleCoercion.unqualified(function, "NULLIF")
                             || OracleCoercion.unqualified(function, "COALESCE"))
                     && function.getParameters() != null) {

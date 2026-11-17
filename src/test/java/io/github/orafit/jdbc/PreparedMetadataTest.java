@@ -52,6 +52,7 @@ public final class PreparedMetadataTest {
                                             switch (resultMethod.getName()) {
                                                 case "next" -> cursor[0]++ == 0;
                                                 case "getInt" -> ResultSetMetaData.columnNoNulls;
+                                                case "getString" -> "id";
                                                 default ->
                                                         defaultValue(resultMethod.getReturnType());
                                             });

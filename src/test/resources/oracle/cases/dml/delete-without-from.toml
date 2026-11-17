@@ -1,0 +1,74 @@
+version = 1
+feature = "delete-without-from"
+
+[[case]]
+id = "delete-no-from.where"
+title = "DELETE without FROM with a WHERE clause"
+kind = "update"
+compare = "update"
+sql = """
+DELETE bs_dml WHERE id = 1
+"""
+observe_sql = """
+SELECT id FROM bs_dml ORDER BY id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "delete-no-from.alias"
+title = "DELETE without FROM with a table alias"
+kind = "update"
+compare = "update"
+sql = """
+DELETE bs_dml d WHERE d.id = 2
+"""
+observe_sql = """
+SELECT id FROM bs_dml ORDER BY id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "delete-no-from.all"
+title = "DELETE without FROM or WHERE removes every row"
+kind = "update"
+compare = "update"
+sql = """
+DELETE bs_dml
+"""
+observe_sql = """
+SELECT COUNT(*) AS remaining FROM bs_dml ORDER BY 1
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "delete-no-from.subquery"
+title = "DELETE without FROM with a subquery condition"
+kind = "update"
+compare = "update"
+sql = """
+DELETE bs_dml WHERE id IN (SELECT deptno FROM bs_emp WHERE empno < 3)
+"""
+observe_sql = """
+SELECT id FROM bs_dml ORDER BY id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"

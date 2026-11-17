@@ -1,0 +1,211 @@
+version = 1
+feature = "jdbc-batch-failure-semantics"
+
+[[case]]
+id = "batch.all-succeed"
+title = "Every row of a batch is stored"
+kind = "update"
+compare = "update"
+sql = """
+INSERT INTO bs_dml (id, code, amount, note) VALUES (?, ?, ?, ?)
+"""
+observe_sql = """
+SELECT id, code, amount, note FROM bs_dml ORDER BY id
+"""
+batch = [["10", "X", "1.5", "a"], ["11", "Y", "2.5", "b"], ["12", "Z", "3.5", "c"]]
+[[case.bind]]
+mode = "in"
+index = 1
+type = "INTEGER"
+value = "0"
+[[case.bind]]
+mode = "in"
+index = 2
+type = "VARCHAR"
+value = "0"
+[[case.bind]]
+mode = "in"
+index = 3
+type = "DECIMAL"
+value = "0"
+[[case.bind]]
+mode = "in"
+index = 4
+type = "VARCHAR"
+value = "0"
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "batch.failure-middle"
+title = "A duplicate key in the middle of a batch"
+kind = "update"
+compare = "update"
+sql = """
+INSERT INTO bs_dml (id, code, amount, note) VALUES (?, ?, ?, ?)
+"""
+observe_sql = """
+SELECT id, code, amount, note FROM bs_dml ORDER BY id
+"""
+batch = [["10", "X", "1.5", "a"], ["1", "Y", "2.5", "dup"], ["12", "Z", "3.5", "c"]]
+[[case.bind]]
+mode = "in"
+index = 1
+type = "INTEGER"
+value = "0"
+[[case.bind]]
+mode = "in"
+index = 2
+type = "VARCHAR"
+value = "0"
+[[case.bind]]
+mode = "in"
+index = 3
+type = "DECIMAL"
+value = "0"
+[[case.bind]]
+mode = "in"
+index = 4
+type = "VARCHAR"
+value = "0"
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "batch.failure-first"
+title = "A duplicate key in the first row of a batch"
+kind = "update"
+compare = "update"
+sql = """
+INSERT INTO bs_dml (id, code, amount, note) VALUES (?, ?, ?, ?)
+"""
+observe_sql = """
+SELECT id, code, amount, note FROM bs_dml ORDER BY id
+"""
+batch = [["1", "X", "1.5", "dup"], ["11", "Y", "2.5", "b"], ["12", "Z", "3.5", "c"]]
+[[case.bind]]
+mode = "in"
+index = 1
+type = "INTEGER"
+value = "0"
+[[case.bind]]
+mode = "in"
+index = 2
+type = "VARCHAR"
+value = "0"
+[[case.bind]]
+mode = "in"
+index = 3
+type = "DECIMAL"
+value = "0"
+[[case.bind]]
+mode = "in"
+index = 4
+type = "VARCHAR"
+value = "0"
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "batch.failure-last"
+title = "A duplicate key in the last row of a batch"
+kind = "update"
+compare = "update"
+sql = """
+INSERT INTO bs_dml (id, code, amount, note) VALUES (?, ?, ?, ?)
+"""
+observe_sql = """
+SELECT id, code, amount, note FROM bs_dml ORDER BY id
+"""
+batch = [["10", "X", "1.5", "a"], ["11", "Y", "2.5", "b"], ["1", "Z", "3.5", "dup"]]
+[[case.bind]]
+mode = "in"
+index = 1
+type = "INTEGER"
+value = "0"
+[[case.bind]]
+mode = "in"
+index = 2
+type = "VARCHAR"
+value = "0"
+[[case.bind]]
+mode = "in"
+index = 3
+type = "DECIMAL"
+value = "0"
+[[case.bind]]
+mode = "in"
+index = 4
+type = "VARCHAR"
+value = "0"
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "batch.update-counts"
+title = "The update counts of a batch of UPDATEs"
+kind = "update"
+compare = "update"
+sql = """
+UPDATE bs_dml SET note = ? WHERE id = ?
+"""
+observe_sql = """
+SELECT id, code, amount, note FROM bs_dml ORDER BY id
+"""
+batch = [["n1", "1"], ["none", "99"], ["n3", "3"]]
+[[case.bind]]
+mode = "in"
+index = 1
+type = "VARCHAR"
+value = "0"
+[[case.bind]]
+mode = "in"
+index = 2
+type = "INTEGER"
+value = "0"
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "batch.delete-counts"
+title = "The update counts of a batch of DELETEs"
+kind = "update"
+compare = "update"
+sql = """
+DELETE FROM bs_dml WHERE id = ?
+"""
+observe_sql = """
+SELECT id, code, amount, note FROM bs_dml ORDER BY id
+"""
+batch = [["1"], ["99"], ["3"]]
+[[case.bind]]
+mode = "in"
+index = 1
+type = "INTEGER"
+value = "0"
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"

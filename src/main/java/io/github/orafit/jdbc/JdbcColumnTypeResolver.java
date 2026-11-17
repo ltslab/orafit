@@ -84,6 +84,9 @@ final class JdbcColumnTypeResolver implements ColumnTypeResolver {
                     metadata.getColumns(connection.getCatalog(), schema, candidate, null)) {
                 while (columns != null && columns.next()) {
                     Kind kind = kind(columns.getInt("DATA_TYPE"));
+                    if (kind == Kind.TIMESTAMP
+                            && "timestamp".equals(columns.getString("TYPE_NAME"))
+                            && wholeSeconds(columns)) kind = Kind.DATE;
                     result.put(
                             columns.getString("COLUMN_NAME").toLowerCase(Locale.ROOT),
                             new Physical(kind, charLength(kind, columns)));
@@ -92,6 +95,16 @@ final class JdbcColumnTypeResolver implements ColumnTypeResolver {
             if (!result.isEmpty()) break;
         }
         return result;
+    }
+
+    /**
+     * An Oracle DATE keeps the time of day to the second, so a schema migration (Ora2Pg) stores it
+     * as {@code timestamp(0) without time zone}. That column is a DATE; a TIMESTAMP column keeps
+     * its fractional precision, and a column with a time zone is never a DATE.
+     */
+    private static boolean wholeSeconds(ResultSet columns) throws SQLException {
+        int fractionalDigits = columns.getInt("DECIMAL_DIGITS");
+        return !columns.wasNull() && fractionalDigits == 0;
     }
 
     private static Integer charLength(Kind kind, ResultSet columns) throws SQLException {

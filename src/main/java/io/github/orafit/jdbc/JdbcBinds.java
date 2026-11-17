@@ -8,6 +8,7 @@ import java.lang.reflect.Method;
 import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.List;
 
@@ -49,11 +50,33 @@ final class JdbcBinds {
             throw JdbcProxy.unsupported(
                     "A stream/reader bind cannot be duplicated safely by " + duplicateContext);
         }
+        if (JdbcLobs.bind(delegate, outputs, method, args)) return;
+        // The setter, not the server, decides that a date or timestamp is one: pgJDBC sends
+        // setTimestamp/setDate untyped, so TRUNC(?) or ADD_MONTHS(?, 1) match several overloads.
+        Timestamp moment = typedMoment(method, args);
+        if (moment != null) {
+            for (int output : outputs) delegate.setObject(output, moment.toLocalDateTime());
+            return;
+        }
         for (int output : outputs) {
             Object[] mapped = args.clone();
             mapped[0] = output;
             JdbcProxy.invokeDelegate(method, delegate, mapped);
         }
+    }
+
+    /** The Timestamp or Date a two-argument setter binds, as a Timestamp; otherwise null. */
+    private static Timestamp typedMoment(Method method, Object[] args) {
+        if (args == null || args.length != 2) return null;
+        boolean setter =
+                switch (method.getName()) {
+                    case "setTimestamp", "setDate", "setObject" -> true;
+                    default -> false;
+                };
+        if (!setter) return null;
+        if (args[1] instanceof Timestamp timestamp) return timestamp;
+        if (args[1] instanceof java.sql.Date date) return new Timestamp(date.getTime());
+        return null;
     }
 
     static ParameterMetaData oracleParameters(ParameterMetaData delegate, BindLineage binds) {
@@ -170,7 +193,7 @@ final class JdbcBinds {
         };
     }
 
-    private static boolean duplicateUnsafe(Object[] args) {
+    static boolean duplicateUnsafe(Object[] args) {
         for (int i = 1; i < args.length; i++) {
             if (args[i] instanceof InputStream || args[i] instanceof Reader) return true;
         }

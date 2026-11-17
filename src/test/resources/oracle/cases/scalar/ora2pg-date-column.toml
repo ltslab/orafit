@@ -1,0 +1,124 @@
+version = 1
+feature = "ora2pg-date-column"
+
+[[case]]
+id = "ora2pg-date.plain"
+title = "A DATE column stored as timestamp(0) is described as a DATE"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id, d FROM bs_ora2pg_dates ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "ora2pg-date.plus-days"
+title = "DATE column plus days"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id, d + 1 AS value FROM bs_ora2pg_dates ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "ora2pg-date.minus-days"
+title = "DATE column minus days"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id, d - 1.5 AS value FROM bs_ora2pg_dates ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "ora2pg-date.days-plus-date"
+title = "Days plus a DATE column"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id, 1 + d AS value FROM bs_ora2pg_dates ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "ora2pg-date.difference"
+title = "DATE column minus DATE column is a number of days"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id, d2 - d AS value FROM bs_ora2pg_dates ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "ora2pg-date.trunc"
+title = "TRUNC of a DATE column"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id, TRUNC(d) AS value FROM bs_ora2pg_dates ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "ora2pg-date.add-months"
+title = "ADD_MONTHS of a DATE column"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id, ADD_MONTHS(d, 1) AS value FROM bs_ora2pg_dates ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "ora2pg-date.where"
+title = "DATE arithmetic in a condition"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id FROM bs_ora2pg_dates WHERE d + 1 = DATE '2024-02-01' ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "ora2pg-date.update"
+title = "UPDATE of a DATE column from itself plus days"
+kind = "update"
+compare = "update"
+sql = """
+UPDATE bs_ora2pg_dates SET d = d + 1 WHERE id = 1
+"""
+observe_sql = """
+SELECT id, d FROM bs_ora2pg_dates ORDER BY id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"

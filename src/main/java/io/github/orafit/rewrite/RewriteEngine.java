@@ -14,6 +14,7 @@ import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
 import net.sf.jsqlparser.expression.operators.relational.InExpression;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.statement.Statement;
+import net.sf.jsqlparser.statement.delete.Delete;
 import net.sf.jsqlparser.statement.select.Distinct;
 import net.sf.jsqlparser.statement.select.ExceptOp;
 import net.sf.jsqlparser.statement.select.FromItem;
@@ -100,6 +101,7 @@ public final class RewriteEngine {
         changed |= functions.rewrite(statement);
         changed |= normalizeRowLimiting(statement);
         changed |= normalizeUpdateTarget(statement);
+        changed |= normalizeDeleteFrom(statement);
         changed |= normalizeNullOrderBy(statement);
         changed |= dual.rewrite(statement);
         changed |= listagg.rewrite(statement);
@@ -225,6 +227,13 @@ public final class RewriteEngine {
             if (source.equalsIgnoreCase(column.getUnquotedTableName()))
                 column.getTable().setName(replacement);
         }
+    }
+
+    /** Oracle's FROM is optional in DELETE; PostgreSQL requires it. */
+    private static boolean normalizeDeleteFrom(Statement statement) {
+        if (!(statement instanceof Delete delete) || delete.isHasFrom()) return false;
+        delete.setHasFrom(true);
+        return true;
     }
 
     private static boolean normalizeUpdateTarget(Statement statement) throws TranslationException {

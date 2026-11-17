@@ -112,6 +112,19 @@ CREATE FUNCTION orafit.to_varchar2(
 RETURNS text LANGUAGE sql STABLE PARALLEL SAFE
 AS $$ SELECT pg_catalog.to_char($1, orafit._pg_datetime_format($4)) $$;
 
+-- CAST(number AS VARCHAR2(n)): Oracle raises ORA-25137 when the digits do not fit, where
+-- PostgreSQL's cast would cut them off.
+CREATE FUNCTION orafit.fit_varchar2(value text, width integer)
+RETURNS text LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE
+AS $$
+BEGIN
+    IF length(value) > width THEN
+        RAISE EXCEPTION 'ORA-25137: Data value out of range' USING ERRCODE = '99999';
+    END IF;
+    RETURN value;
+END
+$$;
+
 -- Explicit TO_CHAR formats use PostgreSQL type dispatch instead of JDBC schema lookups.
 CREATE FUNCTION orafit.to_char_format(value date, format text)
 RETURNS text

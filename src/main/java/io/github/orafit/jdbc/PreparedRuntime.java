@@ -7,12 +7,14 @@ import io.github.orafit.translation.Translation;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.sql.BatchUpdateException;
 import java.sql.Connection;
 import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -78,6 +80,11 @@ final class PreparedRuntime {
         private final Connection owner;
         private final int[] bindWidths;
 
+        /** The last setter call of each parameter ({method, args}), and one copy per addBatch. */
+        private final Object[][] setters;
+
+        private final List<Object[][]> batch = new ArrayList<>();
+
         private Handler(
                 PreparedStatement delegate,
                 BindLineage binds,
@@ -88,6 +95,97 @@ final class PreparedRuntime {
             this.metadata = metadata;
             this.owner = owner;
             this.bindWidths = new int[binds.inputCount() + 1];
+            this.setters = new Object[binds.inputCount() + 1][];
+        }
+
+        /**
+         * Oracle stops a failing batch at the failing row and keeps the rows before it; pgJDBC
+         * rolls the whole batch back (to the savepoint autosave took) and reports -3 for every row.
+         * After such a failure the rows are replayed one at a time on the intact transaction, which
+         * stops at the same row with the counts of the rows before it.
+         *
+         * <p>With auto-commit on, pgJDBC sends a large batch in several round trips that commit
+         * separately, so there would be no intact state to replay on: the batch then runs in one
+         * transaction, committed when it ends (the rows before a failing row included, as in
+         * Oracle).
+         */
+        private Object executeBatch(Method method, Object[] args) throws Throwable {
+            List<Object[][]> rows = new ArrayList<>(batch);
+            batch.clear();
+            Connection connection = delegate.getConnection();
+            boolean autoCommit = connection.getAutoCommit();
+            if (autoCommit) connection.setAutoCommit(false);
+            Object counts;
+            try {
+                counts = JdbcProxy.invokeDelegate(method, delegate, args);
+            } catch (Throwable failure) {
+                Throwable outcome = failure;
+                if (failure instanceof BatchUpdateException batchFailure && replayable(rows)) {
+                    outcome = replay(rows, batchFailure);
+                }
+                if (autoCommit) {
+                    try {
+                        connection.setAutoCommit(true);
+                    } catch (SQLException commitFailure) {
+                        outcome.addSuppressed(commitFailure);
+                    }
+                }
+                throw outcome;
+            }
+            if (autoCommit) connection.setAutoCommit(true);
+            return counts;
+        }
+
+        /** A stream or reader was consumed by the first attempt and cannot be bound again. */
+        private static boolean replayable(List<Object[][]> rows) {
+            for (Object[][] row : rows) {
+                for (Object[] call : row) {
+                    if (call != null && JdbcBinds.duplicateUnsafe((Object[]) call[1])) return false;
+                }
+            }
+            return true;
+        }
+
+        private SQLException replay(List<Object[][]> rows, BatchUpdateException first) {
+            long[] counts = new long[rows.size()];
+            int done = 0;
+            for (Object[][] row : rows) {
+                try {
+                    delegate.clearParameters();
+                    for (Object[] call : row) {
+                        if (call == null) continue;
+                        Object[] setter = (Object[]) call[1];
+                        JdbcBinds.mapSetter(
+                                delegate,
+                                binds,
+                                (Method) call[0],
+                                setter,
+                                (Integer) setter[0],
+                                "the supported Orafit contract");
+                    }
+                    counts[done] = delegate.executeLargeUpdate();
+                    done++;
+                } catch (SQLException failure) {
+                    // Without autosave the failed batch aborted the transaction: nothing can run
+                    // on it, and the batch's own failure is the one to report.
+                    if ("25P02".equals(failure.getSQLState())) return first;
+                    return batchFailure(JdbcErrors.fromDelegate(failure), counts, done);
+                } catch (Throwable failure) {
+                    return batchFailure(JdbcErrors.fromDelegate(first), counts, done);
+                }
+            }
+            // The batch failed as a whole but every row runs alone: report the first failure.
+            return batchFailure(JdbcErrors.fromDelegate(first), counts, done);
+        }
+
+        private static BatchUpdateException batchFailure(
+                SQLException mapped, long[] counts, int done) {
+            return new BatchUpdateException(
+                    mapped.getMessage(),
+                    mapped.getSQLState(),
+                    mapped.getErrorCode(),
+                    Arrays.copyOf(counts, done),
+                    mapped);
         }
 
         @Override
@@ -108,6 +206,7 @@ final class PreparedRuntime {
             }
             if (name.equals("clearParameters")) {
                 Arrays.fill(bindWidths, 0);
+                Arrays.fill(setters, null);
                 return JdbcProxy.invokeDelegate(method, delegate, args);
             }
             if (JdbcProxy.parameterSetter(method, args)) {
@@ -115,7 +214,15 @@ final class PreparedRuntime {
                 JdbcBinds.mapSetter(
                         delegate, binds, method, args, input, "the supported Orafit contract");
                 bindWidths[input] = JdbcBinds.bindWidth(method, args);
+                setters[input] = new Object[] {method, args};
                 return null;
+            }
+            if (name.equals("addBatch") && (args == null || args.length == 0)) {
+                batch.add(setters.clone());
+            } else if (name.equals("clearBatch")) {
+                batch.clear();
+            } else if (name.equals("executeBatch") || name.equals("executeLargeBatch")) {
+                return executeBatch(method, args);
             }
             return JdbcMetadata.oracleResult(
                     JdbcProxy.invokeDelegate(method, delegate, args),

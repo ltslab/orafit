@@ -1,0 +1,165 @@
+version = 1
+feature = "to-char-date-expression"
+
+[[case]]
+id = "to-char-date.plus-days"
+title = "TO_CHAR of a DATE column plus days"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno, TO_CHAR(hired + 1, 'YYYY-MM-DD') AS value FROM bs_emp ORDER BY empno
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "to-char-date.trunc"
+title = "TO_CHAR of TRUNC of a DATE column"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno, TO_CHAR(TRUNC(hired), 'YYYY-MM-DD HH24:MI:SS') AS value FROM bs_emp ORDER BY empno
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "to-char-date.parenthesised"
+title = "TO_CHAR of a parenthesised DATE column"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno, TO_CHAR((hired), 'DD/MM/YYYY') AS value FROM bs_emp ORDER BY empno
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "to-char-date.trunc-plus-day"
+title = "TO_CHAR of TRUNC plus a day"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno, TO_CHAR(TRUNC(hired) + 1, 'YYYY-MM-DD') AS value FROM bs_emp ORDER BY empno
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "to-char-date.add-months"
+title = "TO_CHAR of ADD_MONTHS of a DATE column"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno, TO_CHAR(ADD_MONTHS(hired, 1), 'YYYY-MM-DD') AS value FROM bs_emp ORDER BY empno
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "to-char-date.literal-plus-days"
+title = "TO_CHAR of a DATE literal plus days"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TO_CHAR(DATE '2024-02-29' + 1, 'YYYY-MM-DD') AS value FROM dual
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "to-char-date.sysdate-offset"
+title = "TO_CHAR of SYSDATE minus days keeps a four digit year"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT LENGTH(TO_CHAR(SYSDATE - 1, 'YYYY')) AS value FROM dual
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "to-char-date.bind-date"
+title = "TO_CHAR of a DATE bind"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TO_CHAR(?, 'YYYY-MM-DD') AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "DATE"
+value = "2026-01-31"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "to-char-date.bind-timestamp"
+title = "TO_CHAR of a TIMESTAMP bind"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TO_CHAR(?, 'YYYY-MM-DD HH24:MI:SS') AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "TIMESTAMP"
+value = "2026-01-31 08:09:10"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "to-char-date.bind-plus-day"
+title = "TO_CHAR of a DATE bind plus a day"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TO_CHAR(? + 1, 'YYYY-MM-DD') AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "DATE"
+value = "2026-01-31"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "to-char-number.bind"
+title = "TO_CHAR of a DECIMAL bind with a number format"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TO_CHAR(?, '9990.00') AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "DECIMAL"
+value = "12.5"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"

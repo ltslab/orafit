@@ -2,6 +2,8 @@
 -- Each marked block is executed as one JDBC statement.
 
 -- @statement
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE bs_ora2pg_dates PURGE'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
+-- @statement
 BEGIN EXECUTE IMMEDIATE 'DROP TABLE bs_events PURGE'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
 -- @statement
 BEGIN EXECUTE IMMEDIATE 'DROP TABLE bs_checked PURGE'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;
@@ -213,6 +215,18 @@ INSERT INTO bs_events VALUES (1, 10)
 INSERT INTO bs_events VALUES (2, 20)
 -- @statement
 INSERT INTO bs_events VALUES (3, 15)
+
+-- Ora2Pg stores an Oracle DATE as timestamp(0) (see postgres.sql).
+-- @statement
+CREATE TABLE bs_ora2pg_dates (
+    id NUMBER(4) PRIMARY KEY,
+    d  DATE,
+    d2 DATE
+)
+-- @statement
+INSERT INTO bs_ora2pg_dates VALUES (1, DATE '2024-01-31', DATE '2024-03-01')
+-- @statement
+INSERT INTO bs_ora2pg_dates VALUES (2, TO_DATE('2024-02-29 13:45:10', 'YYYY-MM-DD HH24:MI:SS'), TO_DATE('2024-03-01 01:00:00', 'YYYY-MM-DD HH24:MI:SS'))
 
 -- @statement
 CREATE TABLE bs_checked (
