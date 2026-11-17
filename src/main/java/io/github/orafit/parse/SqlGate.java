@@ -55,6 +55,7 @@ public final class SqlGate {
         "UPPER",
         "CEIL",
         "MOD",
+        "BITAND",
         "REPLACE",
         "TRANSLATE"
     };
@@ -237,6 +238,7 @@ public final class SqlGate {
                 || masked.indexOf('*') >= 0
                 || wordSequence(masked, "ALTER", "SEQUENCE")
                 || qualifiedUpdateTarget(masked)
+                || deleteWithoutFrom(masked)
                 || containsFunction(masked, METADATA_FUNCTIONS)
                 || wordSequence(masked, "FOR", "UPDATE", "OF")
                 || wordSequence(masked, "ORDER", "BY", "NULL")
@@ -246,7 +248,12 @@ public final class SqlGate {
     private static boolean requiresDatabaseCoercion(String masked) {
         for (int i = 0; i < masked.length(); i++)
             if ("=<>+-".indexOf(masked.charAt(i)) >= 0) return true;
-        return word(masked, "INSERT")
+        return masked.indexOf('|') >= 0
+                || word(masked, "LIKE")
+                || word(masked, "LPAD")
+                || word(masked, "RPAD")
+                || word(masked, "SUBSTR")
+                || word(masked, "INSERT")
                 || word(masked, "UPDATE")
                 || word(masked, "UNION")
                 || word(masked, "SUM")
@@ -668,6 +675,13 @@ public final class SqlGate {
 
     private static boolean flashbackAsOf(String sql) {
         return wordSequence(sql, "AS", "OF") && (word(sql, "SCN") || word(sql, "TIMESTAMP"));
+    }
+
+    /** Oracle's FROM is optional in DELETE; the parser adds the one PostgreSQL requires. */
+    private static boolean deleteWithoutFrom(String sql) {
+        if (!firstWord(sql, "DELETE")) return false;
+        int next = skipWhitespace(sql, skipWhitespace(sql, 0) + "DELETE".length());
+        return !wordAt(sql, "FROM", next);
     }
 
     private static boolean qualifiedUpdateTarget(String sql) {

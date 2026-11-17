@@ -212,6 +212,41 @@ BEGIN
 END
 $$;
 
+-- BITAND truncates both arguments toward zero and ands them as 64-bit integers. Oracle's
+-- result outside that range is undefined, so it is refused instead of approximated.
+CREATE FUNCTION orafit.bitand(a numeric, b numeric)
+RETURNS numeric LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE
+AS $$
+DECLARE
+    x numeric := trunc(a);
+    y numeric := trunc(b);
+BEGIN
+    IF NOT (x BETWEEN -9223372036854775808 AND 9223372036854775807
+            AND y BETWEEN -9223372036854775808 AND 9223372036854775807) THEN
+        RAISE EXCEPTION 'Orafit: BITAND outside the 64-bit integer range is unsupported'
+            USING ERRCODE = '0A000';
+    END IF;
+    RETURN (x::bigint & y::bigint)::numeric;
+END
+$$;
+
+-- Oracle's AVG is the NUMBER quotient of the sum and the count of the non-NULL
+-- values; PostgreSQL's avg stops at sixteen fractional digits. State: {sum, count}.
+CREATE FUNCTION orafit.avg_accumulate(state numeric[], value numeric)
+RETURNS numeric[] LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+AS $$ SELECT ARRAY[$1[1] + $2, $1[2] + 1] $$;
+
+CREATE FUNCTION orafit.avg_final(state numeric[])
+RETURNS numeric LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+AS $$ SELECT CASE WHEN $1[2] = 0 THEN NULL ELSE orafit.divide($1[1], $1[2]) END $$;
+
+CREATE AGGREGATE orafit.avg(numeric) (
+    SFUNC = orafit.avg_accumulate,
+    STYPE = numeric[],
+    FINALFUNC = orafit.avg_final,
+    INITCOND = '{0,0}'
+);
+
 -- Normalize the bounded Oracle NUMBER representation after numeric arithmetic
 -- and unconstrained NUMBER casts. The exponent is corrected without relying on
 -- floating point logarithms at powers of 100.

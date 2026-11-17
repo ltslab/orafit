@@ -507,6 +507,45 @@ RETURNS interval
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
 AS $$ SELECT $1 * interval '1 day' $$;
 
+-- bind +/- days: the type the bind was given by its setter decides whether the offset is date or
+-- number arithmetic. A DATE keeps the second only; a numeric string is read as a number.
+CREATE FUNCTION orafit.plus(value timestamp without time zone, days numeric)
+RETURNS timestamp without time zone LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+AS $$ SELECT orafit.cast_date($1) + orafit.days_interval($2) $$;
+CREATE FUNCTION orafit.minus(value timestamp without time zone, days numeric)
+RETURNS timestamp without time zone LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+AS $$ SELECT orafit.cast_date($1) - orafit.days_interval($2) $$;
+CREATE FUNCTION orafit.plus(value numeric, amount numeric)
+RETURNS numeric LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$ SELECT $1 + $2 $$;
+CREATE FUNCTION orafit.minus(value numeric, amount numeric)
+RETURNS numeric LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$ SELECT $1 - $2 $$;
+CREATE FUNCTION orafit.plus(value text, amount numeric)
+RETURNS numeric LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$ SELECT orafit.to_number($1) + $2 $$;
+CREATE FUNCTION orafit.minus(value text, amount numeric)
+RETURNS numeric LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$ SELECT orafit.to_number($1) - $2 $$;
+-- setShort, setInt, setLong, setFloat and setDouble arrive typed. Each has its own overload: with
+-- only a floating-point one, PostgreSQL would prefer it for every integer and lose digits.
+CREATE FUNCTION orafit.plus(value smallint, amount numeric)
+RETURNS numeric LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$ SELECT $1 + $2 $$;
+CREATE FUNCTION orafit.minus(value smallint, amount numeric)
+RETURNS numeric LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$ SELECT $1 - $2 $$;
+CREATE FUNCTION orafit.plus(value integer, amount numeric)
+RETURNS numeric LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$ SELECT $1 + $2 $$;
+CREATE FUNCTION orafit.minus(value integer, amount numeric)
+RETURNS numeric LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$ SELECT $1 - $2 $$;
+CREATE FUNCTION orafit.plus(value bigint, amount numeric)
+RETURNS numeric LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$ SELECT $1 + $2 $$;
+CREATE FUNCTION orafit.minus(value bigint, amount numeric)
+RETURNS numeric LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$ SELECT $1 - $2 $$;
+CREATE FUNCTION orafit.plus(value real, amount numeric)
+RETURNS numeric LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$ SELECT orafit.to_number($1) + $2 $$;
+CREATE FUNCTION orafit.minus(value real, amount numeric)
+RETURNS numeric LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$ SELECT orafit.to_number($1) - $2 $$;
+CREATE FUNCTION orafit.plus(value double precision, amount numeric)
+RETURNS numeric LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$ SELECT orafit.to_number($1) + $2 $$;
+CREATE FUNCTION orafit.minus(value double precision, amount numeric)
+RETURNS numeric LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$ SELECT orafit.to_number($1) - $2 $$;
+
 -- English weekday names; preserve time of day.
 CREATE FUNCTION orafit.next_day(value timestamp, weekday text)
 RETURNS timestamp LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE

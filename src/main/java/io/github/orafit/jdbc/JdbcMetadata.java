@@ -33,6 +33,25 @@ final class JdbcMetadata {
                     if (method.getName().equals("getStatement") && owner != null) return owner;
                     if (method.getName().equals("getMetaData"))
                         return oracleMetadata(result, plan, bindWidths);
+                    if (JdbcLobs.getter(method.getName()) && args != null && args.length == 1)
+                        return JdbcLobs.read(result, method.getName(), args[0]);
+                    if (method.getName().equals("getObject")
+                            && args != null
+                            && args.length == 2
+                            && args[1] instanceof Class<?> type) {
+                        int ordinal =
+                                args[0] instanceof Integer index
+                                        ? index
+                                        : result.findColumn((String) args[0]);
+                        Object typed =
+                                typedObject(
+                                        (ResultSet) proxy,
+                                        result,
+                                        oracleMetadata(result, plan, bindWidths),
+                                        ordinal,
+                                        type);
+                        if (typed != UNHANDLED) return typed;
+                    }
                     ResultCall call = resultCall(result, plan, method, args);
                     if (call.result() != null) return call.result();
                     Object raw = JdbcProxy.invokeDelegate(call.method(), result, call.args());
@@ -55,6 +74,65 @@ final class JdbcMetadata {
                     }
                     return raw;
                 });
+    }
+
+    private static final Object UNHANDLED = new Object();
+
+    /**
+     * getObject(column, Class) the way the Oracle driver answers it for a NUMBER (the Java number
+     * types and String) and for a DATE (java.time, java.sql and String types; no time zone, so
+     * OffsetDateTime and ZonedDateTime of a value fail and Instant is not a type of the column).
+     * Anything else is left to the delegate.
+     */
+    private static Object typedObject(
+            ResultSet proxy,
+            ResultSet result,
+            ResultSetMetaData metadata,
+            int ordinal,
+            Class<?> type)
+            throws SQLException {
+        int jdbcType = metadata.getColumnType(ordinal);
+        boolean date =
+                jdbcType == Types.TIMESTAMP && "DATE".equals(metadata.getColumnTypeName(ordinal));
+        if (jdbcType == Types.NUMERIC) {
+            if (type == String.class) return proxy.getString(ordinal);
+            BigDecimal raw = result.getBigDecimal(ordinal);
+            if (raw == null) return type == Object.class ? UNHANDLED : null;
+            // The same normalization as getBigDecimal, so every getter agrees on the value.
+            BigDecimal number = oracleNumberResult(result, new Object[] {ordinal}, raw);
+            try {
+                if (type == BigDecimal.class || type == Number.class) return number;
+                if (type == Integer.class) return number.toBigInteger().intValueExact();
+                if (type == Long.class) return number.toBigInteger().longValueExact();
+                if (type == Short.class) return number.toBigInteger().shortValueExact();
+                if (type == Double.class) return number.doubleValue();
+                if (type == Float.class) return number.floatValue();
+                if (type == java.math.BigInteger.class) return number.toBigInteger();
+            } catch (ArithmeticException overflow) {
+                throw new SQLException("Numeric Overflow", "99999", 17026, overflow);
+            }
+            return UNHANDLED;
+        }
+        if (!date) return UNHANDLED;
+        if (type == java.time.Instant.class)
+            throw new SQLException("ORA-17004: Invalid column type", "99999", 17004);
+        boolean zoned =
+                type == java.time.OffsetDateTime.class || type == java.time.ZonedDateTime.class;
+        if (!(zoned
+                || type == java.time.LocalDate.class
+                || type == java.time.LocalDateTime.class
+                || type == java.sql.Timestamp.class
+                || type == java.sql.Date.class
+                || type == String.class)) return UNHANDLED;
+        java.sql.Timestamp moment = result.getTimestamp(ordinal);
+        if (moment == null) return null;
+        if (zoned) throw new SQLException("ORA-18716: not in any time zone.", "72000", 18716);
+        java.time.LocalDateTime local = moment.toLocalDateTime();
+        if (type == java.time.LocalDate.class) return local.toLocalDate();
+        if (type == java.time.LocalDateTime.class) return local;
+        if (type == java.sql.Timestamp.class) return moment;
+        if (type == java.sql.Date.class) return java.sql.Date.valueOf(local.toLocalDate());
+        return java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(local);
     }
 
     /** getObject follows the Oracle type: NUMBER is a BigDecimal and DATE a Timestamp. */
@@ -248,7 +326,11 @@ final class JdbcMetadata {
                     if (!JdbcProxy.indexed(args))
                         return JdbcProxy.invokeDelegate(method, delegate, args);
                     int ordinal = (Integer) args[0];
-                    Column column = plan.column(ordinal);
+                    Column column =
+                            wholeSecondsAsDate(
+                                    byResult(plan.column(ordinal), delegate, ordinal),
+                                    delegate,
+                                    ordinal);
                     int type = delegate.getColumnType(ordinal);
                     return switch (method.getName()) {
                         case "getColumnLabel", "getColumnName" ->
@@ -360,6 +442,36 @@ final class JdbcMetadata {
                     true;
             default -> false;
         };
+    }
+
+    /** Settles a DATE-or-NUMBER column by the type the delegate reports for the result. */
+    private static Column byResult(Column column, ResultSetMetaData delegate, int ordinal)
+            throws SQLException {
+        if (column.kind() != Kind.DATE_OR_NUMBER) return column;
+        int type = delegate.getColumnType(ordinal);
+        boolean date = type == Types.DATE || type == Types.TIMESTAMP;
+        return new Column(
+                column.label(),
+                date ? Kind.DATE : Kind.NUMBER,
+                date ? 7 : 0,
+                date ? 0 : column.scale() != null ? column.scale() : -127,
+                null,
+                column.source(),
+                column.nullable());
+    }
+
+    /**
+     * A timestamp without fractional seconds is how a schema migration (Ora2Pg) stores an Oracle
+     * DATE, so a result column of that type is described as the DATE it is.
+     */
+    private static Column wholeSecondsAsDate(Column column, ResultSetMetaData delegate, int ordinal)
+            throws SQLException {
+        if (column.kind() != Kind.AUTO
+                || delegate.getColumnType(ordinal) != Types.TIMESTAMP
+                || !"timestamp".equals(delegate.getColumnTypeName(ordinal))
+                || delegate.getScale(ordinal) != 0) return column;
+        return new Column(
+                column.label(), Kind.DATE, 7, 0, null, column.source(), column.nullable());
     }
 
     private static int jdbcType(Kind kind, int type) {

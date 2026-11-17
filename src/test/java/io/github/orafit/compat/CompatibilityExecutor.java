@@ -81,7 +81,42 @@ public final class CompatibilityExecutor {
         }
     }
 
+    /**
+     * Runs the statement once per batch row and reports the update counts. A failing batch is not
+     * an error observation: its counts, error code and the rows left behind are what Oracle and
+     * Orafit are compared on.
+     */
+    private Observation executeBatch(CompatibilityCase test) throws Exception {
+        List<Object> outcome = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(test.sql())) {
+            for (List<String> row : test.batch()) {
+                List<CompatibilityCase.Bind> binds = new ArrayList<>();
+                for (CompatibilityCase.Bind bind : test.binds()) {
+                    binds.add(
+                            new CompatibilityCase.Bind(
+                                    bind.index(),
+                                    bind.type(),
+                                    bind.mode(),
+                                    false,
+                                    row.get(bind.index() - 1)));
+                }
+                applyInputs(statement, binds);
+                statement.addBatch();
+            }
+            try {
+                for (int count : statement.executeBatch()) outcome.add(Integer.toString(count));
+            } catch (java.sql.BatchUpdateException failure) {
+                outcome.add("BATCH_FAILED");
+                outcome.add(Integer.toString(failure.getErrorCode()));
+                outcome.add(String.valueOf(failure.getSQLState()));
+                for (int count : failure.getUpdateCounts()) outcome.add(Integer.toString(count));
+            }
+        }
+        return observe(test, Observation.ok().withRows(List.of(outcome)));
+    }
+
     private Observation executeUpdate(CompatibilityCase test) throws Exception {
+        if (!test.batch().isEmpty()) return executeBatch(test);
         boolean keys = !test.generatedKeys().isEmpty();
         try (PreparedStatement statement =
                 keys
@@ -227,6 +262,7 @@ public final class CompatibilityExecutor {
                 case BOOLEAN ->
                         statement.setBoolean(bind.index(), Boolean.parseBoolean(bind.value()));
                 case DECIMAL -> statement.setBigDecimal(bind.index(), new BigDecimal(bind.value()));
+                case DOUBLE -> statement.setDouble(bind.index(), Double.parseDouble(bind.value()));
                 case DATE -> statement.setDate(bind.index(), java.sql.Date.valueOf(bind.value()));
                 case TIMESTAMP ->
                         statement.setTimestamp(bind.index(), Timestamp.valueOf(bind.value()));
@@ -252,6 +288,7 @@ public final class CompatibilityExecutor {
             case VARCHAR -> Types.VARCHAR;
             case INTEGER -> Types.INTEGER;
             case DECIMAL -> Types.NUMERIC;
+            case DOUBLE -> Types.DOUBLE;
             case BOOLEAN -> Types.BOOLEAN;
             case DATE -> Types.DATE;
             case TIMESTAMP -> Types.TIMESTAMP;
@@ -347,6 +384,7 @@ public final class CompatibilityExecutor {
                 yield statement.wasNull() ? null : value.toPlainString();
             }
             case BOOLEAN -> throw new IllegalArgumentException("BOOLEAN cannot be an output bind");
+            case DOUBLE -> throw new IllegalArgumentException("DOUBLE cannot be an output bind");
             case INTEGER -> {
                 int value = statement.getInt(bind.index());
                 yield statement.wasNull() ? null : Integer.toString(value);

@@ -117,6 +117,16 @@ url=jdbc:orafit://<host>:<port>/<database>
 
 Everything after `jdbc:orafit:` is passed to pgJDBC unchanged, including URL parameters. Orafit is also exercised with common JDBC connection pools in the test suite.
 
+### Character ordering
+
+Oracle sorts and compares character data by binary value. A database created with the `C`, `POSIX` or `C.UTF-8` collation (or the builtin provider) orders the same way. Other default collations, including the `en_US.UTF-8` default of Aurora and RDS, can order `ORDER BY`, comparisons, `MIN`/`MAX` and pagination over character data differently from Oracle. Orafit still connects and logs one WARNING per connection (logger `io.github.orafit.jdbc`).
+
+Set `orafit.collation=reject` (connection property or URL parameter) to refuse such a database with SQLState 0A000, or `orafit.collation=ignore` to silence the warning when the application never depends on character ordering.
+
+### Column types after Ora2Pg
+
+Oracle `DATE` keeps a time of day, so Ora2Pg maps it to `timestamp(0) without time zone`. Orafit reads the physical column types of the tables a statement names and treats such a column as a `DATE`: `d + 1`, `d - other`, `TRUNC(d)`, `UPDATE ... SET d = d + 1` and the result metadata follow Oracle's DATE rules (checked against Oracle 18c XE, see `COMPATIBILITY.md`). A `timestamp(6)` column stays an Oracle `TIMESTAMP`.
+
 ### Transaction behavior
 
 Oracle keeps an explicit transaction usable after a single statement fails; PostgreSQL normally aborts it. Orafit defaults the delegated pgJDBC connection to `autosave=always` and `cleanupSavepoints=true` to preserve the Oracle-style behavior.

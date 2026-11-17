@@ -1,0 +1,405 @@
+version = 1
+feature = "date-bind-expression"
+
+[[case]]
+id = "date-bind.trunc"
+title = "TRUNC of a TIMESTAMP bind"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TRUNC(?) AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "TIMESTAMP"
+value = "2026-01-31 08:00:00"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "date-bind.trunc-date"
+title = "TRUNC of a DATE bind"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT TRUNC(?) AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "DATE"
+value = "2026-01-31"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "date-bind.add-months"
+title = "ADD_MONTHS of a DATE bind"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT ADD_MONTHS(?, 1) AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "DATE"
+value = "2026-01-31"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "date-bind.last-day"
+title = "LAST_DAY of a TIMESTAMP bind"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT LAST_DAY(?) AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "TIMESTAMP"
+value = "2026-02-10 08:00:00"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "date-bind.compare-minus"
+title = "Compare a DATE column with a DATE bind minus days"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno FROM bs_emp WHERE hired >= ? - 400 ORDER BY empno
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "DATE"
+value = "2024-06-01"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "date-bind.compare"
+title = "Compare a DATE column with a TIMESTAMP bind"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno FROM bs_emp WHERE hired < ? ORDER BY empno
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "TIMESTAMP"
+value = "2021-01-01 00:00:00"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "date-bind.plus-day"
+title = "A DATE bind plus a day"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT ? + 1 AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "DATE"
+value = "2026-01-31"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "date-bind.minus-day"
+title = "A TIMESTAMP bind minus a day"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT ? - 1 AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "TIMESTAMP"
+value = "2026-03-01 06:00:00"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "date-bind.plus-fraction"
+title = "A TIMESTAMP bind plus half a day"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT ? + 0.5 AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "TIMESTAMP"
+value = "2026-03-01 06:00:00"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "date-bind.days-plus-date"
+title = "Days plus a DATE bind"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT 2 + ? AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "DATE"
+value = "2026-02-27"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "date-bind.plus-day-timestamp-fraction"
+title = "A TIMESTAMP bind with a fraction plus a day"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT ? + 1 AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "TIMESTAMP"
+value = "2026-03-01 06:00:00.75"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "number-bind.plus"
+title = "An INTEGER bind plus a number is a number"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT ? + 1 AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "INTEGER"
+value = "41"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "number-bind.minus-decimal"
+title = "A DECIMAL bind minus a number is a number"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT ? - 0.25 AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "DECIMAL"
+value = "10.5"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "number-bind.string"
+title = "A numeric string bind plus a number is a number"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT ? + 1 AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "VARCHAR"
+value = "5"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "number-bind.compare"
+title = "A number bind offset in a condition"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno FROM bs_emp WHERE empno = ? - 1 ORDER BY empno
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "INTEGER"
+value = "4"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "number-bind.double"
+title = "A DOUBLE bind plus a number is a number"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT ? + 1 AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "DOUBLE"
+value = "5.5"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "number-bind.minus-bind"
+title = "A number bind minus a number bind"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT ? - ? AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "INTEGER"
+value = "9"
+[[case.bind]]
+mode = "in"
+index = 2
+type = "INTEGER"
+value = "2"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "number-bind.plus-bind-mixed"
+title = "A numeric string bind plus a DOUBLE bind"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT ? + ? AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "VARCHAR"
+value = "5"
+[[case.bind]]
+mode = "in"
+index = 2
+type = "DOUBLE"
+value = "2.5"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "date-bind.minus-bind"
+title = "A TIMESTAMP bind minus a number bind is a DATE"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT ? - ? AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "TIMESTAMP"
+value = "2024-03-10 08:09:10.5"
+[[case.bind]]
+mode = "in"
+index = 2
+type = "INTEGER"
+value = "2"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "date-bind.plus-bind"
+title = "A DATE bind plus a number bind is a DATE"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT ? + ? AS value FROM dual
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "DATE"
+value = "2026-01-31"
+[[case.bind]]
+mode = "in"
+index = 2
+type = "DECIMAL"
+value = "1.5"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "date-bind.compare-minus-bind"
+title = "A date bind minus a number bind compared with a DATE"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT empno FROM bs_emp WHERE hired >= ? - ? ORDER BY empno
+"""
+[[case.bind]]
+mode = "in"
+index = 1
+type = "DATE"
+value = "2024-06-01"
+[[case.bind]]
+mode = "in"
+index = 2
+type = "INTEGER"
+value = "400"
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"

@@ -172,8 +172,23 @@ public final class CompatibilityCases {
                             sql,
                             observeSql,
                             binds,
-                            optionalStrings(table, "generated_keys")));
+                            optionalStrings(table, "generated_keys"),
+                            batchRows(table)));
         }
+    }
+
+    /** {@code batch = [["1", "a"], ["2", "b"]]}: one row of bind values per addBatch(). */
+    private static List<List<String>> batchRows(TomlTable table) {
+        TomlArray rows = table.getArray("batch");
+        if (rows == null) return List.of();
+        List<List<String>> batch = new ArrayList<>();
+        for (int i = 0; i < rows.size(); i++) {
+            TomlArray row = rows.getArray(i);
+            List<String> values = new ArrayList<>();
+            for (int j = 0; j < row.size(); j++) values.add(row.getString(j));
+            batch.add(List.copyOf(values));
+        }
+        return List.copyOf(batch);
     }
 
     private static List<String> optionalStrings(TomlTable table, String key) {

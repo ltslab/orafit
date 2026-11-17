@@ -1,0 +1,92 @@
+version = 1
+feature = "multi-column-update"
+
+[[case]]
+id = "update-set-list.constants"
+title = "UPDATE SET (a, b) = (SELECT ...) from constants"
+kind = "update"
+compare = "update"
+sql = """
+UPDATE bs_dml SET (code, note) = (SELECT 'Z', 'zz' FROM dual) WHERE id = 1
+"""
+observe_sql = """
+SELECT id, code, note FROM bs_dml ORDER BY id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "update-set-list.correlated"
+title = "UPDATE SET (a, b) = (SELECT ...) correlated to another row"
+kind = "update"
+compare = "update"
+sql = """
+UPDATE bs_dml SET (code, amount) = (SELECT s.code, s.amount * 2 FROM bs_dml s WHERE s.id = bs_dml.id + 1) WHERE id = 1
+"""
+observe_sql = """
+SELECT id, code, amount FROM bs_dml ORDER BY id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "update-set-list.no-row"
+title = "UPDATE SET (a, b) = (SELECT ...) with no row sets NULL"
+kind = "update"
+compare = "update"
+sql = """
+UPDATE bs_dml SET (code, note) = (SELECT 'Z', 'zz' FROM dual WHERE 1 = 0) WHERE id = 1
+"""
+observe_sql = """
+SELECT id, code, note FROM bs_dml ORDER BY id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "update-set-list.numbers"
+title = "UPDATE SET (a, b) = (SELECT ...) into NUMBER columns"
+kind = "update"
+compare = "update"
+sql = """
+UPDATE bs_dml SET (amount, id) = (SELECT 1, 9 FROM dual) WHERE id = 1
+"""
+observe_sql = """
+SELECT id, amount FROM bs_dml ORDER BY id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "update-set-list.correlated-numbers"
+title = "UPDATE SET (a, b) = (SELECT ...) correlated, into NUMBER columns"
+kind = "update"
+compare = "update"
+sql = """
+UPDATE bs_dml d SET (amount, id) = (SELECT s.amount + 1, s.id + 10 FROM bs_dml s WHERE s.id = d.id) WHERE d.id = 2
+"""
+observe_sql = """
+SELECT id, amount FROM bs_dml ORDER BY id
+"""
+
+[case.oracle]
+outcome = "success"
+
+[case.orafit]
+mode = "same"

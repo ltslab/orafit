@@ -270,6 +270,88 @@ contract = "same"
 evidence = ["aggregate.empty-input-null", "aggregate.group-by-having"]
 
 [[feature]]
+id = "avg-number-precision"
+area = "query"
+scope = "owned"
+contract = "same"
+evidence = ["aggregate.avg-repeating-fraction", "aggregate.avg-equals-sum-over-count", "aggregate.avg-skips-null", "aggregate.avg-no-rows", "aggregate.avg-distinct", "aggregate.avg-analytic"]
+
+[[feature]]
+id = "delete-without-from"
+area = "dml"
+scope = "owned"
+contract = "same"
+evidence = ["delete-no-from.where", "delete-no-from.alias", "delete-no-from.all", "delete-no-from.subquery"]
+
+[[feature]]
+id = "multi-column-update"
+area = "dml"
+scope = "owned"
+contract = "same"
+evidence = ["update-set-list.constants", "update-set-list.correlated", "update-set-list.no-row", "update-set-list.numbers", "update-set-list.correlated-numbers"]
+
+[[feature]]
+id = "cast-number-varchar2"
+area = "functions"
+scope = "owned"
+contract = "same"
+evidence = ["scalar.cast-number-column-varchar2", "scalar.cast-fraction-varchar2", "scalar.cast-number-arithmetic-varchar2", "scalar.cast-text-column-varchar2", "scalar.cast-negative-fraction-varchar2", "scalar.cast-zero-varchar2", "scalar.cast-small-varchar2", "scalar.cast-large-varchar2", "scalar.cast-null-number-varchar2", "scalar.cast-number-varchar2-too-long", "scalar.cast-number-column-varchar2-too-long"]
+
+[[feature]]
+id = "char-padding-text"
+area = "datatype-semantics"
+scope = "owned"
+contract = "same"
+evidence = ["char-text.concat-left", "char-text.concat-right", "char-text.concat-two-columns", "char-text.concat-varchar", "char-text.concat-length", "char-text.like-padded", "char-text.like-wildcard", "char-text.lpad", "char-text.rpad", "char-text.length", "char-text.substr"]
+
+[[feature]]
+id = "ora2pg-date-column"
+area = "datatype-semantics"
+scope = "owned"
+contract = "same"
+evidence = ["ora2pg-date.plain", "ora2pg-date.plus-days", "ora2pg-date.minus-days", "ora2pg-date.days-plus-date", "ora2pg-date.difference", "ora2pg-date.trunc", "ora2pg-date.add-months", "ora2pg-date.where", "ora2pg-date.update"]
+
+[[feature]]
+id = "date-bind-expression"
+area = "jdbc"
+scope = "owned"
+contract = "same"
+evidence = ["date-bind.trunc", "date-bind.trunc-date", "date-bind.add-months", "date-bind.last-day", "date-bind.compare-minus", "date-bind.compare", "date-bind.plus-day", "date-bind.minus-day", "date-bind.plus-fraction", "date-bind.days-plus-date", "date-bind.plus-day-timestamp-fraction", "number-bind.plus", "number-bind.minus-decimal", "number-bind.string", "number-bind.compare", "number-bind.double", "number-bind.minus-bind", "number-bind.plus-bind-mixed", "date-bind.minus-bind", "date-bind.plus-bind", "date-bind.compare-minus-bind"]
+
+[[feature]]
+id = "jdbc-batch-failure-semantics"
+area = "jdbc"
+scope = "owned"
+contract = "same"
+evidence = ["batch.all-succeed", "batch.failure-middle", "batch.failure-first", "batch.failure-last", "batch.update-counts", "batch.delete-counts"]
+
+[[feature]]
+id = "jdbc-lob-text-bytea"
+area = "jdbc"
+scope = "owned"
+contract = "bounded"
+
+[[feature]]
+id = "to-char-date-expression"
+area = "functions"
+scope = "owned"
+contract = "same"
+evidence = ["to-char-date.plus-days", "to-char-date.trunc", "to-char-date.parenthesised", "to-char-date.trunc-plus-day", "to-char-date.add-months", "to-char-date.literal-plus-days", "to-char-date.sysdate-offset", "to-char-date.bind-date", "to-char-date.bind-timestamp", "to-char-date.bind-plus-day", "to-char-number.bind"]
+
+[[feature]]
+id = "jdbc-typed-getobject"
+area = "jdbc"
+scope = "owned"
+contract = "bounded"
+
+[[feature]]
+id = "bitand-function"
+area = "functions"
+scope = "owned"
+contract = "same"
+evidence = ["scalar.bitand-literals", "scalar.bitand-negative", "scalar.bitand-column", "scalar.bitand-null", "scalar.bitand-fraction", "scalar.bitand-both-negative", "scalar.bitand-large", "scalar.bitand-string"]
+
+[[feature]]
 id = "set-operations"
 area = "query"
 scope = "owned"
@@ -736,6 +818,12 @@ evidence = ["bind.colon-named", "bind.colon-numbered-in-order", "bind.colon-numb
 [[feature]]
 id = "jdbc-database-metadata-catalog"
 area = "jdbc"
+scope = "owned"
+contract = "bounded"
+
+[[feature]]
+id = "database-default-collation"
+area = "platform"
 scope = "owned"
 contract = "bounded"
 

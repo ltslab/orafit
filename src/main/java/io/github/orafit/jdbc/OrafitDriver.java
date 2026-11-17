@@ -51,6 +51,7 @@ public final class OrafitDriver implements Driver {
             throw new SQLNonTransientConnectionException(
                     "No PostgreSQL JDBC driver accepted " + postgresUrl, "08001");
         }
+        CollationCheck.check(delegate, url, info);
         return new JdbcRuntime().wrap(delegate);
     }
 

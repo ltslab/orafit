@@ -1,0 +1,145 @@
+version = 1
+feature = "char-padding-text"
+
+[[case]]
+id = "char-text.concat-left"
+title = "CHAR column keeps its padding after a literal"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id, '|' || code3 AS value FROM bs_char_width ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "char-text.concat-right"
+title = "CHAR column keeps its padding before a literal"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id, code3 || '|' AS value FROM bs_char_width ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "char-text.concat-two-columns"
+title = "Two CHAR columns keep their padding when joined"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id, code2 || code3 AS value FROM bs_char_width ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "char-text.concat-varchar"
+title = "CHAR joined with a VARCHAR2 keeps its padding"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id, code3 || text3 AS value FROM bs_char_width ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "char-text.concat-length"
+title = "Length of a concatenated CHAR column"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id, LENGTH('|' || code3) AS value FROM bs_char_width ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "char-text.like-padded"
+title = "LIKE sees the padded CHAR value"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id FROM bs_char_width WHERE code3 LIKE 'A' ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "char-text.like-wildcard"
+title = "LIKE with a wildcard over a padded CHAR"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id FROM bs_char_width WHERE code3 LIKE 'A_ ' ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "char-text.lpad"
+title = "LPAD pads the padded CHAR value"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id, LPAD(code3, 5, '*') AS value FROM bs_char_width ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "char-text.rpad"
+title = "RPAD pads the padded CHAR value"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id, RPAD(code3, 5, '*') AS value FROM bs_char_width ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "char-text.length"
+title = "LENGTH of a CHAR column counts its padding"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id, LENGTH(code3) AS value FROM bs_char_width ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"
+
+[[case]]
+id = "char-text.substr"
+title = "SUBSTR of a CHAR column sees its padding"
+kind = "query"
+compare = "ordered"
+sql = """
+SELECT id, SUBSTR(code3, 2, 2) AS value FROM bs_char_width ORDER BY id
+"""
+[case.oracle]
+outcome = "success"
+[case.orafit]
+mode = "same"

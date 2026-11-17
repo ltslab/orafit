@@ -89,8 +89,14 @@ final class OracleDifferentialIT {
         System.out.println("Canonical compatibility cases: " + CompatibilityCases.list().size());
     }
 
+    /**
+     * {@code -Dorafit.test.cases=<regex>} runs only the cases whose id matches (for development).
+     */
     Stream<CompatibilityCase> cases() {
-        return CompatibilityCases.all();
+        String only = System.getProperty("orafit.test.cases");
+        return only == null
+                ? CompatibilityCases.all()
+                : CompatibilityCases.all().filter(test -> test.id().matches(only));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -294,7 +300,10 @@ final class OracleDifferentialIT {
     private static void assertSame(
             CompatibilityCase test, Target target, Observation expected, Observation actual) {
         String prefix = target.label() + " / " + test.id() + ": ";
-        assertEquals(expected.status(), actual.status(), prefix + "status");
+        assertEquals(
+                expected.status(),
+                actual.status(),
+                prefix + "status" + (actual.error() == null ? "" : " " + actual.error()));
         if ("error".equals(expected.status())) {
             assertNotNull(expected.error(), prefix + "Oracle error");
             assertNotNull(actual.error(), prefix + "Orafit error");
@@ -343,6 +352,7 @@ final class OracleDifferentialIT {
                                             expected.postState(),
                                             actual.postState(),
                                             prefix + "DML post-state"),
+                            () -> assertEquals(expected.rows(), actual.rows(), prefix + "batch"),
                             () ->
                                     assertEquals(
                                             expected.returningRows(),

@@ -65,6 +65,7 @@ final class ScalarLoweringRule {
         Change change = new Change();
         change.resolver = resolver;
         change.dml = !(statement instanceof net.sf.jsqlparser.statement.select.Select);
+        if (statement instanceof Update update) change.update = update;
         change.databaseResolvedDecodes.addAll(DecodeLowering.databaseResolved(statement));
         for (PlainSelect select : SelectTrees.plain(statement)) {
             change.select = select;
@@ -241,6 +242,13 @@ final class ScalarLoweringRule {
                             new CastExpression(cast.getLeftExpression(), "timestamp"));
                 }
                 if ("VARCHAR2".equalsIgnoreCase(type)) {
+                    // Oracle writes a NUMBER the way TO_CHAR does (.5, 1000.5), not PostgreSQL's.
+                    if (numberOperand(cast.getLeftExpression(), change)) {
+                        cast.setLeftExpression(
+                                fitted(
+                                        OracleCoercion.text(cast.getLeftExpression()),
+                                        cast.getColDataType().getArgumentsStringList()));
+                    }
                     cast.getColDataType().setDataType("varchar");
                     change.changed = true;
                 }
@@ -300,6 +308,11 @@ final class ScalarLoweringRule {
         if (expression instanceof TrimFunction trim) return lowerTrim(trim, change);
         if (expression instanceof Function function) {
             lowerFunction(function, change);
+            if (OracleCoercion.unqualified(function, "AVG")
+                    && function.getParameters() != null
+                    && function.getParameters().size() == 1) {
+                return numberAvg(function, change);
+            }
             if (OracleCoercion.unqualified(function, "LTRIM")
                     || OracleCoercion.unqualified(function, "RTRIM")) {
                 return lowerDirectionalTrim(function, change);
@@ -363,6 +376,10 @@ final class ScalarLoweringRule {
                             "TIMESTAMP_DIFFERENCE",
                             "Mixed TIMESTAMP/DATE subtraction requires an Oracle INTERVAL JDBC contract");
             }
+            if (comparison(binary)) {
+                markDateBinds(binary.getLeftExpression(), binary.getRightExpression(), change);
+                markDateBinds(binary.getRightExpression(), binary.getLeftExpression(), change);
+            }
             binary.setLeftExpression(lower(binary.getLeftExpression(), change));
             binary.setRightExpression(lower(binary.getRightExpression(), change));
             if (binary instanceof Division) {
@@ -382,6 +399,11 @@ final class ScalarLoweringRule {
                         "orafit.date_difference",
                         binary.getLeftExpression(),
                         binary.getRightExpression());
+            }
+            Function offset = bindOffset(binary);
+            if (offset != null) {
+                change.changed = true;
+                return offset;
             }
             lowerImplicitNumber(binary, change);
             lowerDays(binary, change);
@@ -433,9 +455,48 @@ final class ScalarLoweringRule {
         return expression;
     }
 
+    /**
+     * Oracle's AVG divides as NUMBER division does; PostgreSQL's avg keeps 16 fractional digits.
+     */
+    private static final String NUMBER_AVG = "orafit.avg";
+
+    @SuppressWarnings("unchecked")
+    private static Function numberAvg(Function function, Change change) {
+        function.setName(NUMBER_AVG);
+        ((ExpressionList<Expression>) function.getParameters())
+                .set(0, OracleCoercion.number(function.getParameters().get(0)));
+        change.changed = true;
+        return function;
+    }
+
+    /** Oracle refuses a number whose text is longer than the VARCHAR2; a cast would cut it. */
+    private static Expression fitted(Expression text, java.util.List<String> arguments) {
+        if (arguments == null || arguments.isEmpty()) return text;
+        java.util.regex.Matcher width =
+                java.util.regex.Pattern.compile("^\\s*(\\d+)").matcher(arguments.get(0));
+        if (!width.find()) return text;
+        return new Function(
+                "orafit.fit_varchar2", text, new LongValue(Long.parseLong(width.group(1))));
+    }
+
+    private static boolean numberOperand(Expression operand, Change change)
+            throws TranslationException {
+        if (operand instanceof LongValue
+                || operand instanceof net.sf.jsqlparser.expression.DoubleValue
+                || operand instanceof SignedExpression) return true;
+        return change.select != null
+                && DatabaseTypeCoercionRule.expressionKind(operand, change.select, change.resolver)
+                        == ColumnTypeResolver.Kind.NUMBER;
+    }
+
     private static void lowerAnalytic(AnalyticExpression analytic, Change change)
             throws TranslationException {
         analytic.setExpression(lower(analytic.getExpression(), change));
+        if ("AVG".equalsIgnoreCase(analytic.getName()) && analytic.getExpression() != null) {
+            analytic.setName(NUMBER_AVG);
+            analytic.setExpression(OracleCoercion.number(analytic.getExpression()));
+            change.changed = true;
+        }
         analytic.setOffset(lower(analytic.getOffset(), change));
         analytic.setDefaultValue(lower(analytic.getDefaultValue(), change));
         analytic.setFilterExpression(lower(analytic.getFilterExpression(), change));
@@ -654,6 +715,9 @@ final class ScalarLoweringRule {
         if (change.select != null
                 && DatabaseTypeCoercionRule.expressionKind(value, change.select, change.resolver)
                         == ColumnTypeResolver.Kind.DATE) return true;
+        if (change.update != null
+                && DatabaseTypeCoercionRule.expressionKind(value, change.update, change.resolver)
+                        == ColumnTypeResolver.Kind.DATE) return true;
         return knownDate(value);
     }
 
@@ -695,6 +759,65 @@ final class ScalarLoweringRule {
         return dayNumber(value)
                 || (value instanceof Function function
                         && "orafit.days_interval".equalsIgnoreCase(function.getName()));
+    }
+
+    /**
+     * {@code ? + 1}, {@code 1 + ?} and {@code ? - 1}: the setter decides whether the bind is a date
+     * or a number, so the runtime picks the arithmetic by the type the bind arrives with. In {@code
+     * ? + ?} and {@code ? - ?} the first bind decides and the second is a number; two dates (an
+     * INTERVAL in Oracle) match no overload and fail.
+     */
+    private static Function bindOffset(BinaryExpression binary) {
+        if (!(binary instanceof Addition || binary instanceof Subtraction)) return null;
+        Expression left = binary.getLeftExpression(), right = binary.getRightExpression();
+        String name = binary instanceof Addition ? "orafit.plus" : "orafit.minus";
+        if (left instanceof JdbcNamedParameter && numericLiteral(right))
+            return new Function(name, left, right);
+        if (left instanceof JdbcNamedParameter && right instanceof JdbcNamedParameter)
+            return new Function(name, left, new Function("orafit.to_number_bind", right));
+        if (binary instanceof Addition
+                && numericLiteral(left)
+                && right instanceof JdbcNamedParameter) return new Function(name, right, left);
+        return null;
+    }
+
+    private static boolean comparison(BinaryExpression binary) {
+        return binary instanceof EqualsTo
+                || binary instanceof NotEqualsTo
+                || binary instanceof GreaterThan
+                || binary instanceof GreaterThanEquals
+                || binary instanceof MinorThan
+                || binary instanceof MinorThanEquals;
+    }
+
+    /**
+     * In {@code date_column >= ? - 30} the bind is a date by its setter, which the translation
+     * cannot see; against a DATE operand it is read as one, so the days are date arithmetic. A bind
+     * compared with anything else stays a number.
+     */
+    private static void markDateBinds(Expression anchor, Expression other, Change change)
+            throws TranslationException {
+        if (!(other instanceof Addition || other instanceof Subtraction)
+                || !knownDate(anchor, change)) return;
+        BinaryExpression arithmetic = (BinaryExpression) other;
+        Expression left = arithmetic.getLeftExpression();
+        Expression right = arithmetic.getRightExpression();
+        if (left instanceof JdbcNamedParameter
+                && dayNumber(right)
+                && !(right instanceof JdbcNamedParameter)) {
+            arithmetic.setLeftExpression(dateBind(left));
+            change.changed = true;
+        } else if (arithmetic instanceof Addition
+                && right instanceof JdbcNamedParameter
+                && dayNumber(left)
+                && !(left instanceof JdbcNamedParameter)) {
+            arithmetic.setRightExpression(dateBind(right));
+            change.changed = true;
+        }
+    }
+
+    private static Expression dateBind(Expression bind) {
+        return new Function("orafit.cast_date", new CastExpression(bind, "timestamp"));
     }
 
     private static boolean dayNumber(Expression value) {
@@ -775,6 +898,7 @@ final class ScalarLoweringRule {
         boolean dml;
         final Set<String> dmlNextvals = new java.util.HashSet<>();
         PlainSelect select;
+        Update update;
         ColumnTypeResolver resolver;
         final Set<Function> databaseResolvedDecodes =
                 Collections.newSetFromMap(new IdentityHashMap<>());

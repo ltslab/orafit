@@ -18,7 +18,8 @@ public record CompatibilityCase(
         String sql,
         String observeSql,
         List<Bind> binds,
-        List<String> generatedKeys) {
+        List<String> generatedKeys,
+        List<List<String>> batch) {
 
     public enum Kind {
         QUERY,
@@ -56,6 +57,7 @@ public record CompatibilityCase(
         VARCHAR,
         INTEGER,
         DECIMAL,
+        DOUBLE,
         BOOLEAN,
         DATE,
         TIMESTAMP,

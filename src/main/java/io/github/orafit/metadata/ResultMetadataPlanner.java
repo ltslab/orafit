@@ -73,6 +73,13 @@ public final class ResultMetadataPlanner {
                     && DatabaseTypeCoercionRule.expressionKind(
                                     subtraction.getRightExpression(), select, resolver)
                             == ColumnTypeResolver.Kind.DATE) type = ExpressionMetadata.number(0);
+            else if (type.kind() != Kind.DATE
+                    && !(expression instanceof AllColumns)
+                    && DatabaseTypeCoercionRule.expressionKind(expression, select, resolver)
+                            == ColumnTypeResolver.Kind.DATE)
+                // Only the column types tell d + 1, TRUNC(d) or a column from their other forms.
+                type = ExpressionMetadata.date();
+            type = physicalTextType(expression, type, select, resolver);
             boolean physicalSet = false;
             if (statement instanceof SetOperationList set) {
                 Column setType = setColumnType(set, columns.size());
@@ -96,6 +103,36 @@ public final class ResultMetadataPlanner {
                             type.paddingFallback()));
         }
         return new ResultMetadataPlan(columns);
+    }
+
+    /**
+     * The type of {@code ||} and SUBSTR over table columns, from the physical widths: CHAR || CHAR
+     * is a CHAR as wide as both together, anything else joined is a VARCHAR2 (as Oracle says).
+     */
+    private static Column physicalTextType(
+            Expression expression, Column type, PlainSelect select, ColumnTypeResolver resolver)
+            throws TranslationException {
+        if (expression instanceof net.sf.jsqlparser.expression.operators.arithmetic.Concat) {
+            DatabaseTypeCoercionRule.TextShape shape =
+                    DatabaseTypeCoercionRule.textShape(expression, select, resolver);
+            if (shape == null || !shape.physical()) return type;
+            if (shape.fixed() && shape.width() <= 2000)
+                return ExpressionMetadata.fixedChar(shape.width());
+            if (!shape.fixed() && shape.width() <= 4000)
+                return ExpressionMetadata.varchar2(shape.width());
+            return type;
+        }
+        if (expression instanceof net.sf.jsqlparser.expression.Function function
+                && "SUBSTR".equalsIgnoreCase(function.getName())
+                && function.getParameters() != null
+                && !function.getParameters().isEmpty()) {
+            DatabaseTypeCoercionRule.TextShape shape =
+                    DatabaseTypeCoercionRule.textShape(
+                            function.getParameters().get(0), select, resolver);
+            if (shape != null && shape.physical())
+                return ExpressionMetadata.substr(function, shape.width());
+        }
+        return type;
     }
 
     /** Reports CHAR(n) or VARCHAR2(n) when physical column widths prove the set datatype. */

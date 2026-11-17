@@ -184,10 +184,13 @@ final class PostgresJdbcTest {
     void fixedCharUsesOracleByteWidthForMultibyteValues() throws Exception {
         try (Connection connection = IntegrationSupport.open();
                 Statement statement = connection.createStatement()) {
-            statement.execute("CREATE TEMP TABLE junit_char_byte(value char(15))");
-            statement.execute("INSERT INTO junit_char_byte VALUES ('A'), ('３'), ('テキスト１')");
+            // Ordered by a number: this test is about the padded width, and the order of character
+            // data depends on the database collation.
+            statement.execute("CREATE TEMP TABLE junit_char_byte(id integer, value char(15))");
+            statement.execute(
+                    "INSERT INTO junit_char_byte VALUES (1, 'A'), (3, '３'), (2, 'テキスト１')");
             try (ResultSet result =
-                    statement.executeQuery("SELECT value FROM junit_char_byte ORDER BY value")) {
+                    statement.executeQuery("SELECT value FROM junit_char_byte ORDER BY id")) {
                 assertTrue(result.next());
                 assertEquals("A" + " ".repeat(14), result.getString(1));
                 assertEquals("A" + " ".repeat(14), result.getObject(1));
